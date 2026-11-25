@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from crawler import TaiexMarketService
-from indicators import DEFAULT_THRESHOLDS, evaluate_all_timeframes
+from indicators import DEFAULT_THRESHOLDS, evaluate_all_timeframes, evaluate_taiji_resonance
 
 logging.basicConfig(
     level=logging.INFO,
@@ -113,6 +113,7 @@ async def _build_market_response() -> Dict:
     return {
         "active_target": snapshot["active_target"],
         "quote": quote,
+        "taiji_resonance": evaluate_taiji_resonance(timeframes),
         "timeframes": timeframes,
         "poll_interval_sec": poll_interval_sec,
         "thresholds_pct": {k: round(v * 100, 3) for k, v in current_thresholds.items()},

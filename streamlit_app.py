@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 import streamlit as st
 
 from crawler import TaiexMarketService
-from indicators import DEFAULT_THRESHOLDS, TIMEFRAME_CONFIG, evaluate_all_timeframes
+from indicators import DEFAULT_THRESHOLDS, TIMEFRAME_CONFIG, evaluate_all_timeframes, evaluate_taiji_resonance
 
 st.set_page_config(
     page_title="台指期 / 大盤即時多空力道",
@@ -125,14 +125,26 @@ st.markdown(
         50% { opacity: 0.55; transform: scale(1.18); }
       }
       .rev-bull {
-        display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
-        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
+        padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
         background: rgba(225,29,72,0.22); color: #fda4af; border: 1px solid rgba(244,63,94,0.65);
       }
       .rev-bear {
-        display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
-        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
+        padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
         background: rgba(5,150,105,0.22); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.65);
+      }
+      .rev-taiji-bull {
+        background: linear-gradient(90deg, rgba(225,29,72,0.38), rgba(244,63,94,0.2));
+        border: 1.5px solid #fb7185;
+        box-shadow: 0 0 12px rgba(244,63,94,0.45);
+        color: #fff1f2;
+      }
+      .rev-taiji-bear {
+        background: linear-gradient(90deg, rgba(5,150,105,0.38), rgba(16,185,129,0.2));
+        border: 1.5px solid #34d399;
+        box-shadow: 0 0 12px rgba(16,185,129,0.45);
+        color: #ecfdf5;
       }
       .dot-red {
         width: 8px; height: 8px; border-radius: 50%; background: #f43f5e;
@@ -229,20 +241,19 @@ def _fmt(val) -> str:
 
 
 def _pattern_svg(pattern: str) -> str:
-    """回傳對應反轉型態的迷你 K 線 / 波浪 SVG 圖示 (28x20)"""
+    """回傳對應太極陰陽 / 反轉型態的迷你 K 線與波浪 SVG 圖示 (32x22)"""
     svgs = {
-        "錘頭線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
-        "倒錘頭線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
-        "看漲吞噬": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#10b981" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#10b981"/><line x1="19" y1="2" x2="19" y2="18" stroke="#f43f5e" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#f43f5e"/></svg>',
-        "早晨之星": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="3" width="5" height="9" rx="1" fill="#10b981"/><rect x="11.5" y="13" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="4" width="5" height="10" rx="1" fill="#f43f5e"/></svg>',
-        "三個白武士": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="11" width="5" height="7" rx="1" fill="#f43f5e"/><rect x="11.5" y="7" width="5" height="8" rx="1" fill="#f43f5e"/><rect x="20" y="2" width="5" height="9" rx="1" fill="#f43f5e"/></svg>',
-        "破底翻": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="12" x2="26" y2="12" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,8 Q10,19 16,13 T25,4" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/><polyline points="21,4 25,4 25,8" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>',
-        "流星線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#10b981"/></svg>',
-        "吊人線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#10b981"/></svg>',
-        "看跌吞噬": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#f43f5e" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#f43f5e"/><line x1="19" y1="2" x2="19" y2="18" stroke="#10b981" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#10b981"/></svg>',
-        "黃昏之星": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="8" width="5" height="9" rx="1" fill="#f43f5e"/><rect x="11.5" y="3" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="6" width="5" height="10" rx="1" fill="#10b981"/></svg>',
-        "三隻烏鴉": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="2" width="5" height="8" rx="1" fill="#10b981"/><rect x="11.5" y="6" width="5" height="8" rx="1" fill="#10b981"/><rect x="20" y="10" width="5" height="8" rx="1" fill="#10b981"/></svg>',
-        "假突破翻黑": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        "鎚子": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="18" stroke="#fb7185" stroke-width="1.8"/><rect x="10" y="2" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
+        "多頭吞噬": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="6" width="6" height="7" rx="1" fill="#10b981"/><line x1="19" y1="1" x2="19" y2="19" stroke="#fb7185" stroke-width="1.5"/><rect x="15" y="2" width="8" height="16" rx="1" fill="#f43f5e"/></svg>',
+        "多頭貫穿": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="3" width="6" height="12" rx="1" fill="#10b981"/><line x1="2" y1="9" x2="26" y2="9" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/><rect x="16" y="6" width="7" height="12" rx="1" fill="#f43f5e"/></svg>',
+        "多頭島型反轉": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="2" y="2" width="5" height="6" rx="1" fill="#10b981"/><rect x="11.5" y="13" width="5" height="5" rx="1" fill="#fbbf24"/><rect x="21" y="2" width="5" height="7" rx="1" fill="#f43f5e"/><line x1="1" y1="10.5" x2="27" y2="10.5" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/></svg>',
+        "破底翻": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="2" y1="12" x2="26" y2="12" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,8 Q10,19 16,13 T25,4" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/><polyline points="21,4 25,4 25,8" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        "流星": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="18" stroke="#34d399" stroke-width="1.8"/><rect x="10" y="13" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        "吊人": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="18" stroke="#34d399" stroke-width="1.8"/><rect x="10" y="2" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        "空頭吞噬": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="6" width="6" height="7" rx="1" fill="#f43f5e"/><line x1="19" y1="1" x2="19" y2="19" stroke="#34d399" stroke-width="1.5"/><rect x="15" y="2" width="8" height="16" rx="1" fill="#10b981"/></svg>',
+        "烏雲罩日": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="5" width="6" height="12" rx="1" fill="#f43f5e"/><line x1="2" y1="11" x2="26" y2="11" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/><rect x="16" y="2" width="7" height="12" rx="1" fill="#10b981"/></svg>',
+        "空頭島型反轉": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="2" y="12" width="5" height="6" rx="1" fill="#f43f5e"/><rect x="11.5" y="2" width="5" height="5" rx="1" fill="#fbbf24"/><rect x="21" y="11" width="5" height="7" rx="1" fill="#10b981"/><line x1="1" y1="9.5" x2="27" y2="9.5" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/></svg>',
+        "假突破翻黑": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
     }
     return svgs.get(pattern, "")
 
@@ -261,6 +272,14 @@ def render_live_board(target: str, force: bool) -> None:
         current_price=quote["price"],
         thresholds=st.session_state.thresholds,
     )
+    taiji_res = evaluate_taiji_resonance(timeframes)
+    res_colors = {
+        "bull": ("rgba(225,29,72,0.22)", "#fda4af", "rgba(244,63,94,0.5)"),
+        "bear": ("rgba(5,150,105,0.22)", "#6ee7b7", "rgba(16,185,129,0.5)"),
+        "warn": ("rgba(245,158,11,0.22)", "#fde68a", "rgba(245,158,11,0.5)"),
+        "neutral": ("rgba(51,65,85,0.4)", "#cbd5e1", "rgba(100,116,139,0.4)"),
+    }
+    res_bg, res_fg, res_bd = res_colors.get(taiji_res["tone"], res_colors["neutral"])
 
     chg = quote["change"]
     chg_pct = quote["change_pct"]
@@ -284,9 +303,14 @@ def render_live_board(target: str, force: bool) -> None:
               資料：{quote['market_time'] or '--'} ｜ 更新：{quote['last_fetched_at'] or '--'} ｜ 每 {interval_sec}s
             </div>
           </div>
-          <div style="display:flex; align-items:baseline; gap:14px; margin-top:8px;">
-            <span style="font-size:36px; font-weight:900; color:{price_color};">{_fmt(quote['price'])}</span>
-            <span style="font-size:18px; font-weight:700; color:{price_color};">{sign}{_fmt(chg)} ({sign}{chg_pct:.2f}%)</span>
+          <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
+            <div style="display:flex; align-items:baseline; gap:14px;">
+              <span style="font-size:36px; font-weight:900; color:{price_color};">{_fmt(quote['price'])}</span>
+              <span style="font-size:18px; font-weight:700; color:{price_color};">{sign}{_fmt(chg)} ({sign}{chg_pct:.2f}%)</span>
+            </div>
+            <div style="padding:4px 10px; border-radius:8px; font-size:12px; font-weight:700; background:{res_bg}; color:{res_fg}; border:1px solid {res_bd};">
+              ☯️ 太極共振：{taiji_res['label']}
+            </div>
           </div>
         </div>
         """,
@@ -325,10 +349,14 @@ def render_live_board(target: str, force: bool) -> None:
         rev_html = ""
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bull"><span class="dot-red"></span>{svg_icon}<span>底部反轉：{rev["pattern"]}</span></div>'
+            tj_cls = " rev-taiji-bull" if rev.get("is_taiji") else ""
+            tj_tag = "☯️ 轉陽：" if rev.get("is_taiji") else "底部反轉："
+            rev_html = f'<div class="rev-bull{tj_cls}"><span class="dot-red"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bear"><span class="dot-green"></span>{svg_icon}<span>高檔反轉：{rev["pattern"]}</span></div>'
+            tj_cls = " rev-taiji-bear" if rev.get("is_taiji") else ""
+            tj_tag = "☯️ 轉陰：" if rev.get("is_taiji") else "高檔反轉："
+            rev_html = f'<div class="rev-bear{tj_cls}"><span class="dot-green"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}</span></div>'
 
         row_str = (
             f'<div class="tf-row tabular">'

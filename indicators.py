@@ -294,118 +294,119 @@ def detect_reversal_signal(
     swing_low: Optional[float],
 ) -> Dict[str, Any]:
     """
-    結合「前波位置」與「K 線反轉型態」判定是否亮燈提醒：
-    - 位於前波底部附近 (-20% ~ 25%) + 往上反轉型態 -> 紅色亮燈 (bull_reversal)
-    - 位於前波高點附近 (75% ~ 120%) + 往下反轉型態 -> 綠色亮燈 (bear_reversal)
+    結合「前波位置」與「太極陰陽學 K 線型態」判定亮燈提醒：
+    - 位於前波底部附近 (-20% ~ 25%) + 轉陽型態 -> 紅色亮燈 (bull_reversal)
+      包含：破底翻、多頭島型反轉、多頭吞噬(完全包含)、多頭貫穿(>50%)、鎚子(實體頂端不管紅黑)
+    - 位於前波高點附近 (75% ~ 120%) + 轉陰型態 -> 綠色亮燈 (bear_reversal)
+      包含：假突破翻黑、空頭島型反轉、空頭吞噬(完全包含)、烏雲罩日(>50%)、流星(實體底端)、吊人
     """
     pos = ratio_info.get("value")
     if not candles or pos is None or swing_high is None or swing_low is None:
-        return {"signal": "none", "pattern": None, "zone": "mid"}
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
 
     is_near_bottom = -0.20 <= pos <= 0.25
     is_near_top = 0.75 <= pos <= 1.20
 
     if not is_near_bottom and not is_near_top:
-        return {"signal": "none", "pattern": None, "zone": "mid"}
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
 
     c1 = candles[-1]
     m1 = _candle_metrics(c1)
+    c1_top, c1_bot = max(c1["open"], c1["close"]), min(c1["open"], c1["close"])
 
     if is_near_bottom:
         # 1. 破底翻：跌破前波低後迅速站回前波低之上
         if c1["low"] < swing_low and c1["close"] > swing_low:
-            return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom"}
+            return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom", "is_taiji": False}
+
+        # 2. 多頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體向下跳空孤立
+        if len(candles) >= 3:
+            c2, c3 = candles[-2], candles[-3]
+            c2_top = max(c2["open"], c2["close"])
+            c3_bot = min(c3["open"], c3["close"])
+            if c2_top < c3_bot and c2_top < c1_bot:
+                return {"signal": "bull_reversal", "pattern": "多頭島型反轉", "zone": "bottom", "is_taiji": True}
+
         if len(candles) >= 2:
             c2 = candles[-2]
             m2 = _candle_metrics(c2)
             if c2["low"] < swing_low and c1["close"] > swing_low and m1["is_bull"]:
-                return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom"}
-            # 2. 看漲吞噬（多頭吞噬）
-            if (
-                m2["is_bear"] and m1["is_bull"]
-                and c1["open"] <= c2["close"]
-                and c1["close"] >= c2["open"]
-                and m1["body"] > m2["body"]
-            ):
-                return {"signal": "bull_reversal", "pattern": "看漲吞噬", "zone": "bottom"}
+                return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom", "is_taiji": False}
+            # 3. 多頭吞噬（太極陰陽）：後陽實體「嚴格完全包含」前陰實體（剛好包不算）
+            if m2["is_bear"] and m1["is_bull"] and c1["open"] < c2["close"] and c1["close"] > c2["open"]:
+                return {"signal": "bull_reversal", "pattern": "多頭吞噬", "zone": "bottom", "is_taiji": True}
+            # 4. 多頭貫穿（太極陰陽）：後陽實體由下而上從底部貫穿前陰實體超過一半以上
+            c2_mid = (c2["open"] + c2["close"]) / 2.0
+            if m2["is_bear"] and m1["is_bull"] and c1["open"] < c2["close"] and c1["close"] > c2_mid:
+                return {"signal": "bull_reversal", "pattern": "多頭貫穿", "zone": "bottom", "is_taiji": True}
 
-        if len(candles) >= 3:
-            c2, c3 = candles[-2], candles[-3]
-            m2, m3 = _candle_metrics(c2), _candle_metrics(c3)
-            # 3. 早晨之星（晨星）
-            if (
-                m3["is_bear"] and m3["rng"] > 0 and m3["body"] > 0.4 * m3["rng"]
-                and m2["body"] < 0.35 * m3["rng"]
-                and m1["is_bull"] and c1["close"] > (c3["open"] + c3["close"]) / 2
-            ):
-                return {"signal": "bull_reversal", "pattern": "早晨之星", "zone": "bottom"}
-            # 4. 三個白武士
-            if (
-                m3["is_bull"] and m2["is_bull"] and m1["is_bull"]
-                and c1["close"] > c2["close"] > c3["close"]
-                and m1["rng"] > 0 and m2["rng"] > 0 and m3["rng"] > 0
-                and m1["body"] >= 0.45 * m1["rng"]
-                and m2["body"] >= 0.45 * m2["rng"]
-                and m3["body"] >= 0.45 * m3["rng"]
-            ):
-                return {"signal": "bull_reversal", "pattern": "三個白武士", "zone": "bottom"}
+        # 5. 鎚子（太極陰陽）：實體很小且在最頂端（不管紅黑），下影線 >= 實體兩倍，幾乎無上影線
+        if (
+            m1["rng"] > 0
+            and m1["body"] <= 0.35 * m1["rng"]
+            and m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05)
+            and m1["upper"] <= 0.15 * m1["rng"]
+        ):
+            return {"signal": "bull_reversal", "pattern": "鎚子", "zone": "bottom", "is_taiji": True}
 
-        # 5. 錘頭線 / 6. 倒錘頭線
-        if m1["rng"] > 0 and m1["body"] <= 0.35 * m1["rng"]:
-            if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.25 * m1["rng"]:
-                return {"signal": "bull_reversal", "pattern": "錘頭線", "zone": "bottom"}
-            if m1["upper"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["lower"] <= 0.25 * m1["rng"]:
-                return {"signal": "bull_reversal", "pattern": "倒錘頭線", "zone": "bottom"}
+        return {"signal": "none", "pattern": None, "zone": "bottom", "is_taiji": False}
 
-        return {"signal": "none", "pattern": None, "zone": "bottom"}
-
-    # is_near_top: 高點往下反轉型態 -> 綠色亮燈
+    # is_near_top: 轉陰（頭部型態）-> 綠色亮燈
     if c1["high"] > swing_high and c1["close"] < swing_high:
-        return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top"}
+        return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top", "is_taiji": False}
+
+    # 1. 空頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體向上跳空孤立
+    if len(candles) >= 3:
+        c2, c3 = candles[-2], candles[-3]
+        c2_bot = min(c2["open"], c2["close"])
+        c3_top = max(c3["open"], c3["close"])
+        if c2_bot > c3_top and c2_bot > c1_top:
+            return {"signal": "bear_reversal", "pattern": "空頭島型反轉", "zone": "top", "is_taiji": True}
 
     if len(candles) >= 2:
         c2 = candles[-2]
         m2 = _candle_metrics(c2)
         if c2["high"] > swing_high and c1["close"] < swing_high and m1["is_bear"]:
-            return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top"}
-        # 看跌吞噬（空頭吞噬）
-        if (
-            m2["is_bull"] and m1["is_bear"]
-            and c1["open"] >= c2["close"]
-            and c1["close"] <= c2["open"]
-            and m1["body"] > m2["body"]
-        ):
-            return {"signal": "bear_reversal", "pattern": "看跌吞噬", "zone": "top"}
+            return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top", "is_taiji": False}
+        # 2. 空頭吞噬（太極陰陽）：後陰實體「嚴格完全包含」前陽實體（剛好包不算）
+        if m2["is_bull"] and m1["is_bear"] and c1["open"] > c2["close"] and c1["close"] < c2["open"]:
+            return {"signal": "bear_reversal", "pattern": "空頭吞噬", "zone": "top", "is_taiji": True}
+        # 3. 烏雲罩日（太極陰陽）：後陰實體由上而下從頂部罩住前陽實體超過一半以上
+        c2_mid = (c2["open"] + c2["close"]) / 2.0
+        if m2["is_bull"] and m1["is_bear"] and c1["open"] > c2["close"] and c1["close"] < c2_mid:
+            return {"signal": "bear_reversal", "pattern": "烏雲罩日", "zone": "top", "is_taiji": True}
 
-    if len(candles) >= 3:
-        c2, c3 = candles[-2], candles[-3]
-        m2, m3 = _candle_metrics(c2), _candle_metrics(c3)
-        # 黃昏之星
-        if (
-            m3["is_bull"] and m3["rng"] > 0 and m3["body"] > 0.4 * m3["rng"]
-            and m2["body"] < 0.35 * m3["rng"]
-            and m1["is_bear"] and c1["close"] < (c3["open"] + c3["close"]) / 2
-        ):
-            return {"signal": "bear_reversal", "pattern": "黃昏之星", "zone": "top"}
-        # 三隻烏鴉
-        if (
-            m3["is_bear"] and m2["is_bear"] and m1["is_bear"]
-            and c1["close"] < c2["close"] < c3["close"]
-            and m1["rng"] > 0 and m2["rng"] > 0 and m3["rng"] > 0
-            and m1["body"] >= 0.45 * m1["rng"]
-            and m2["body"] >= 0.45 * m2["rng"]
-            and m3["body"] >= 0.45 * m3["rng"]
-        ):
-            return {"signal": "bear_reversal", "pattern": "三隻烏鴉", "zone": "top"}
-
-    # 流星線 / 吊人線
+    # 4. 流星（實體在最底端，不管紅黑）/ 5. 吊人（同鎚子，出現在頭部）
     if m1["rng"] > 0 and m1["body"] <= 0.35 * m1["rng"]:
-        if m1["upper"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["lower"] <= 0.25 * m1["rng"]:
-            return {"signal": "bear_reversal", "pattern": "流星線", "zone": "top"}
-        if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.25 * m1["rng"]:
-            return {"signal": "bear_reversal", "pattern": "吊人線", "zone": "top"}
+        if m1["upper"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["lower"] <= 0.15 * m1["rng"]:
+            return {"signal": "bear_reversal", "pattern": "流星", "zone": "top", "is_taiji": True}
+        if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.15 * m1["rng"]:
+            return {"signal": "bear_reversal", "pattern": "吊人", "zone": "top", "is_taiji": True}
 
-    return {"signal": "none", "pattern": None, "zone": "top"}
+    return {"signal": "none", "pattern": None, "zone": "top", "is_taiji": False}
+
+
+def evaluate_taiji_resonance(timeframes: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    依太極陰陽學「操作要領」判定 週K 與 日K 共振信號：
+    - 週(+) and 日(+)：快買進
+    - 週(-) and 日(-)：快賣出
+    - 週(+) and 日(-)：賤價買
+    - 週(-) and 日(+)：反彈謹慎 / 偏空看待
+    """
+    tf_map = {tf["timeframe"]: tf["streak"]["streak"] for tf in timeframes}
+    wk_s = tf_map.get("1wk", 0)
+    d_s = tf_map.get("1d", 0)
+
+    if wk_s > 0 and d_s > 0:
+        return {"code": "buy_fast", "label": "週(+) 日(+)：快買進", "tone": "bull"}
+    if wk_s < 0 and d_s < 0:
+        return {"code": "sell_fast", "label": "週(-) 日(-)：快賣出", "tone": "bear"}
+    if wk_s > 0 and d_s < 0:
+        return {"code": "buy_dip", "label": "週(+) 日(-)：賤價買", "tone": "warn"}
+    if wk_s < 0 and d_s > 0:
+        return {"code": "rebound_caution", "label": "週(-) 日(+)：反彈謹慎", "tone": "neutral"}
+    return {"code": "neutral", "label": "週/日盤整觀望", "tone": "neutral"}
 
 
 def evaluate_all_timeframes(

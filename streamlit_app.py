@@ -29,7 +29,7 @@ st.markdown(
         color: #e2e8f0;
       }
       .block-container {
-        padding-top: 1.2rem;
+        padding-top: 3.2rem;
         padding-bottom: 1.5rem;
         max-width: 1100px;
       }
@@ -266,27 +266,21 @@ def render_live_board(target: str, force: bool) -> None:
         else:
             bar_inner = '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:#64748b;">十字盤整</span>'
 
-        rows_html.append(
-            f"""
-            <div class="tf-row tabular">
-              <div class="tf-col-name">
-                <span style="font-size:16px; font-weight:700; color:#f1f5f9;">{tf['label']}</span>
-                <span style="margin-left:6px; font-size:11px; color:#94a3b8; background:#1e293b; padding:1px 6px; border-radius:4px;">ZZ {tf['threshold_pct']}%</span>
-              </div>
-              <div class="tf-col-badge">{badge}</div>
-              <div class="tf-col-ratio">
-                <div style="font-size:15px; font-weight:700; color:{ratio_color};">{ratio['display']}</div>
-                <div style="font-size:11px; color:#94a3b8;">前高 {_fmt(tf['swing_high'])} / 前低 {_fmt(tf['swing_low'])}</div>
-              </div>
-              <div class="tf-col-bar">
-                <div class="bar-track">
-                  <div class="bar-zero"></div>
-                  {bar_inner}
-                </div>
-              </div>
-            </div>
-            """
+        row_str = (
+            f'<div class="tf-row tabular">'
+            f'<div class="tf-col-name">'
+            f'<span style="font-size:16px;font-weight:700;color:#f1f5f9;">{tf["label"]}</span>'
+            f'<span style="margin-left:6px;font-size:11px;color:#94a3b8;background:#1e293b;padding:1px 6px;border-radius:4px;">ZZ {tf["threshold_pct"]}%</span>'
+            f'</div>'
+            f'<div class="tf-col-badge">{badge}</div>'
+            f'<div class="tf-col-ratio">'
+            f'<div style="font-size:15px;font-weight:700;color:{ratio_color};">{ratio["display"]}</div>'
+            f'<div style="font-size:11px;color:#94a3b8;">前高 {_fmt(tf["swing_high"])} / 前低 {_fmt(tf["swing_low"])}</div>'
+            f'</div>'
+            f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div></div>'
+            f'</div>'
         )
+        rows_html.append(row_str)
 
     st.markdown(f'<div class="matrix-card">{"".join(rows_html)}</div>', unsafe_allow_html=True)
     st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 比例 = (前波高 - 現價) / (現價 - 前波低)")

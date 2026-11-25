@@ -73,10 +73,9 @@ st.markdown(
         border-bottom: 1px solid #1e293b;
       }
       .tf-row:last-child { border-bottom: none; }
-      .tf-col-name { flex: 1 1 110px; min-width: 100px; }
+      .tf-col-name { flex: 0 0 68px; }
       .tf-col-badge { flex: 0 0 60px; text-align: center; }
-      .tf-col-ratio { flex: 1 1 180px; min-width: 160px; }
-      .tf-col-bar { flex: 2 1 280px; min-width: 240px; }
+      .tf-col-ratio { flex: 1 1 240px; min-width: 210px; }
       .badge-bull {
         display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
         background: #e11d48; color: #fff; font-weight: 800; font-size: 14px; text-align: center;
@@ -165,7 +164,7 @@ st.markdown(
 
 
 @st.cache_resource
-def get_market_runtime() -> Tuple[TaiexMarketService, asyncio.AbstractEventLoop, threading.Lock]:
+def get_market_runtime(_version: str = "v2") -> Tuple[TaiexMarketService, asyncio.AbstractEventLoop, threading.Lock]:
     """全域共用爬蟲實例與持久事件迴圈，避免多次 asyncio.run() 造成連線池關閉"""
     loop = asyncio.new_event_loop()
     lock = threading.Lock()
@@ -175,7 +174,10 @@ def get_market_runtime() -> Tuple[TaiexMarketService, asyncio.AbstractEventLoop,
     return svc, loop, lock
 
 
-service, _bg_loop, _loop_lock = get_market_runtime()
+service, _bg_loop, _loop_lock = get_market_runtime("v2")
+if not hasattr(service, "ensure_stock_loaded"):
+    st.cache_resource.clear()
+    st.rerun()
 
 
 def run_async(coro):
@@ -360,11 +362,10 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
         unsafe_allow_html=True,
     )
 
-    # 2. 7 週期多空力道矩陣
+    # 2. 多週期看板（15分 / 30分 / 時 / 日 / 週）
     rows_html = []
     for tf in timeframes:
         st_info = tf["streak"]
-        ratio = tf["ratio"]
 
         if st_info["status"] == "陽":
             badge = '<span class="badge-bull">陽</span>'
@@ -372,41 +373,6 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             badge = '<span class="badge-bear">陰</span>'
         else:
             badge = '<span class="badge-flat">盤整</span>'
-
-        ratio_color = "#fb7185" if ratio["state"] == "breakout" else ("#34d399" if ratio["state"] == "breakdown" else "#f1f5f9")
-        ratio_text = ratio["display"].replace(" (創高)", "").replace(" (破底)", "")
-        ratio_badge = ""
-        if ratio["state"] == "breakout":
-            ratio_badge = (
-                '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;'
-                'border-radius:6px;font-size:12px;font-weight:800;background:rgba(225,29,72,0.22);color:#fda4af;border:1px solid rgba(244,63,94,0.6);">'
-                '<svg width="16" height="14" viewBox="0 0 18 14"><line x1="1" y1="9" x2="17" y2="9" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/>'
-                '<polyline points="3,12 9,6 15,2" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/>'
-                '<polyline points="11,2 15,2 15,6" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>'
-                '創高</span>'
-            )
-        elif ratio["state"] == "breakdown":
-            ratio_badge = (
-                '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;'
-                'border-radius:6px;font-size:12px;font-weight:800;background:rgba(5,150,105,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);">'
-                '<svg width="16" height="14" viewBox="0 0 18 14"><line x1="1" y1="5" x2="17" y2="5" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/>'
-                '<polyline points="3,2 9,8 15,12" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>'
-                '<polyline points="11,12 15,12 15,8" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>'
-                '破底</span>'
-            )
-        abs_c = min(st_info["abs_streak"] or 0, 8)
-        w_pct = (abs_c / 8) * 50
-
-        if st_info["streak"] >= 2:
-            bar_inner = f'<div class="bar-fill-bull" style="width:{w_pct}%">{st_info["streak_label"]}</div>'
-        elif st_info["streak"] <= -2:
-            bar_inner = f'<div class="bar-fill-bear" style="width:{w_pct}%">{st_info["streak_label"]}</div>'
-        elif st_info["streak"] == 1:
-            bar_inner = '<div class="bar-weak-bull"></div><span style="position:absolute;left:57.5%;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:#e2e8f0;">1 紅</span>'
-        elif st_info["streak"] == -1:
-            bar_inner = '<div class="bar-weak-bear"></div><span style="position:absolute;right:57.5%;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:#e2e8f0;">1 黑</span>'
-        else:
-            bar_inner = '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:13px;font-weight:600;color:#cbd5e1;">十字盤整</span>'
 
         rev = tf.get("reversal") or {}
         rev_html = ""
@@ -417,36 +383,10 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
 
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bull rev-taiji-bull"><span class="dot-red"></span>{svg_icon}<span>[在陽] 建議買進（{rev["pattern"]}）{rep_badge}{ago_text}</span></div>'
+            rev_html = f'<div class="rev-bull rev-taiji-bull"><span class="dot-red"></span>{svg_icon}<span>{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bear rev-taiji-bear"><span class="dot-green"></span>{svg_icon}<span>[在陰] 建議賣出（{rev["pattern"]}）{rep_badge}{ago_text}</span></div>'
-
-        # 最近最多 7 根已收線紅黑方塊 + 進行中(未收線) K 線紅黑狀況
-        recent_colors = tf.get("recent_colors") or []
-        forming_color = tf.get("forming_color")
-        color_hex = {"red": "#f43f5e", "green": "#10b981", "doji": "#94a3b8"}
-        color_zh = {"red": "紅", "green": "黑", "doji": "十"}
-        blocks_html = "".join(
-            f'<span title="{color_zh.get(col, "")}" style="display:inline-block;width:16px;height:14px;border-radius:3px;background:{color_hex.get(col, "#64748b")};"></span>'
-            for col in recent_colors
-        )
-        forming_html = ""
-        if forming_color:
-            fc_hex = color_hex.get(forming_color, "#94a3b8")
-            fc_zh = color_zh.get(forming_color, "")
-            forming_html = (
-                f'<span style="color:#64748b;margin:0 4px;">|</span>'
-                f'<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:{fc_hex};">'
-                f'<span style="display:inline-block;width:16px;height:14px;border-radius:3px;border:2px dashed {fc_hex};background:rgba(255,255,255,0.06);"></span>'
-                f'即時({fc_zh})</span>'
-            )
-        strip_html = (
-            f'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px;">'
-            f'<span style="font-size:12px;color:#cbd5e1;margin-right:4px;">近{len(recent_colors)}T:</span>'
-            f'{blocks_html}{forming_html}'
-            f'</div>'
-        )
+            rev_html = f'<div class="rev-bear rev-taiji-bear"><span class="dot-green"></span>{svg_icon}<span>{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
 
         mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [])
 
@@ -460,13 +400,12 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             f'{mini_kline_html}'
             f'{rev_html}'
             f'</div>'
-            f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div>{strip_html}</div>'
             f'</div>'
         )
         rows_html.append(row_str)
 
     st.markdown(f'<div class="matrix-card">{"".join(rows_html)}</div>', unsafe_allow_html=True)
-    st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 已收線確認才亮燈")
+    st.caption(f"資料來源：{quote['source']} ｜ 紅燈=底部轉陽 / 綠燈=高檔轉陰（已收線確認）")
 
 
 render_live_board(target_choice, stock_code_input, force_clicked)

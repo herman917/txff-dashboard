@@ -366,7 +366,7 @@ def render_live_board(target: str, force: bool) -> None:
             f'</div>'
             f'<div class="tf-col-badge">{badge}</div>'
             f'<div class="tf-col-ratio">'
-            f'<div style="font-size:15px;font-weight:700;color:{ratio_color};">{ratio["display"]}</div>'
+            f'<div style="font-size:15px;font-weight:700;color:{ratio_color};"><span style="font-size:12px;font-weight:500;color:#94a3b8;margin-right:4px;">距前底:</span>{ratio["display"]}</div>'
             f'<div style="font-size:11px;color:#94a3b8;">前高 {_fmt(tf["swing_high"])} / 前低 {_fmt(tf["swing_low"])}</div>'
             f'{rev_html}'
             f'</div>'

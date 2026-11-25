@@ -349,6 +349,8 @@ class TaiexMarketService:
                 if len(t_str) != 6 or not t_str.isdigit():
                     continue
                 hh, mm, ss = int(t_str[:2]), int(t_str[2:4]), int(t_str[4:6])
+                if not (0 <= hh <= 23 and 0 <= mm <= 59 and 0 <= ss <= 59):
+                    continue
                 dt = now.replace(hour=hh, minute=mm, second=ss, microsecond=0)
                 if is_night and hh >= 15 and now.hour < 6:
                     dt -= timedelta(days=1)

@@ -434,10 +434,17 @@
         statusBadgeHtml = `<span class="inline-flex items-center justify-center w-12 py-1 rounded-md text-xs font-bold bg-slate-700 text-slate-200 border border-slate-600">盤整</span>`;
       }
 
-      // 比例顏色
+      // 比例顏色與創高/破底小圖示
       let ratioColor = 'text-slate-100';
-      if (ratio.state === 'breakout') ratioColor = 'text-rose-400';
-      else if (ratio.state === 'breakdown') ratioColor = 'text-emerald-400';
+      let ratioBadge = '';
+      const ratioText = (ratio.display || '--').replace(' (創高)', '').replace(' (破底)', '');
+      if (ratio.state === 'breakout') {
+        ratioColor = 'text-rose-400';
+        ratioBadge = `<span class="inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50"><svg width="14" height="12" viewBox="0 0 18 14"><line x1="1" y1="9" x2="17" y2="9" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><polyline points="3,12 9,6 15,2" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/><polyline points="11,2 15,2 15,6" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>創高</span>`;
+      } else if (ratio.state === 'breakdown') {
+        ratioColor = 'text-emerald-400';
+        ratioBadge = `<span class="inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"><svg width="14" height="12" viewBox="0 0 18 14"><line x1="1" y1="5" x2="17" y2="5" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><polyline points="3,2 9,8 15,12" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="11,12 15,12 15,8" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>破底</span>`;
+      }
 
       // 雙向進度條計算（以 50% 為中心 0 軸，單側最大 50%）
       let barHtml = '';
@@ -511,7 +518,7 @@
           <!-- 3. 前波比例數值 + ZigZag 高低點 -->
           <div class="md:col-span-3 tabular-nums" title="ZigZag 轉折閾值 ${threshold_pct}%${pivotNote}">
             <div class="flex items-baseline justify-between md:justify-start gap-2">
-              <span class="text-sm sm:text-base font-bold ${ratioColor}"><span class="text-xs font-normal text-slate-400 mr-1">距前底:</span>${ratio.display}</span>
+              <span class="inline-flex items-center text-sm sm:text-base font-bold ${ratioColor}"><span class="text-xs font-normal text-slate-400 mr-1">距前底:</span>${ratioText}${ratioBadge}</span>
               <span class="text-[11px] text-slate-500">${pivotNote}</span>
             </div>
             <div class="text-[11px] text-slate-400 mt-0.5 flex flex-wrap gap-x-2.5">

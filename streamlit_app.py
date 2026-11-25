@@ -342,6 +342,26 @@ def render_live_board(target: str, force: bool) -> None:
             badge = '<span class="badge-flat">盤整</span>'
 
         ratio_color = "#fb7185" if ratio["state"] == "breakout" else ("#34d399" if ratio["state"] == "breakdown" else "#f1f5f9")
+        ratio_text = ratio["display"].replace(" (創高)", "").replace(" (破底)", "")
+        ratio_badge = ""
+        if ratio["state"] == "breakout":
+            ratio_badge = (
+                '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;'
+                'border-radius:6px;font-size:12px;font-weight:800;background:rgba(225,29,72,0.22);color:#fda4af;border:1px solid rgba(244,63,94,0.6);">'
+                '<svg width="16" height="14" viewBox="0 0 18 14"><line x1="1" y1="9" x2="17" y2="9" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                '<polyline points="3,12 9,6 15,2" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/>'
+                '<polyline points="11,2 15,2 15,6" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>'
+                '創高</span>'
+            )
+        elif ratio["state"] == "breakdown":
+            ratio_badge = (
+                '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;'
+                'border-radius:6px;font-size:12px;font-weight:800;background:rgba(5,150,105,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.6);">'
+                '<svg width="16" height="14" viewBox="0 0 18 14"><line x1="1" y1="5" x2="17" y2="5" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                '<polyline points="3,2 9,8 15,12" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>'
+                '<polyline points="11,12 15,12 15,8" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>'
+                '破底</span>'
+            )
         abs_c = min(st_info["abs_streak"] or 0, 8)
         w_pct = (abs_c / 8) * 50
 
@@ -382,7 +402,7 @@ def render_live_board(target: str, force: bool) -> None:
             f'</div>'
             f'<div class="tf-col-badge">{badge}</div>'
             f'<div class="tf-col-ratio">'
-            f'<div style="font-size:18px;font-weight:800;color:{ratio_color};"><span style="font-size:14px;font-weight:600;color:#cbd5e1;margin-right:5px;">距前底:</span>{ratio["display"]}</div>'
+            f'<div style="display:flex;align-items:center;flex-wrap:wrap;font-size:18px;font-weight:800;color:{ratio_color};"><span style="font-size:14px;font-weight:600;color:#cbd5e1;margin-right:5px;">距前底:</span>{ratio_text}{ratio_badge}</div>'
             f'<div style="font-size:13.5px;font-weight:500;color:#cbd5e1;margin-top:2px;">前高 <span style="color:#fda4af;font-weight:700;">{_fmt(tf["swing_high"])}</span> / 前低 <span style="color:#6ee7b7;font-weight:700;">{_fmt(tf["swing_low"])}</span></div>'
             f'{rev_html}'
             f'</div>'

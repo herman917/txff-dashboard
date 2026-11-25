@@ -347,16 +347,21 @@ def render_live_board(target: str, force: bool) -> None:
 
         rev = tf.get("reversal") or {}
         rev_html = ""
+        rep_n = rev.get("repeat_count", 1)
+        bars_ago = rev.get("bars_ago", 0)
+        rep_badge = f'<span style="margin-left:4px;padding:0 5px;border-radius:4px;background:rgba(255,255,255,0.22);color:#fff;font-weight:900;">×{rep_n}</span>' if rep_n > 1 else ""
+        ago_text = f'<span style="margin-left:3px;font-size:11px;opacity:0.85;">({bars_ago}T前)</span>' if bars_ago > 0 else ""
+
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
             tj_cls = " rev-taiji-bull" if rev.get("is_taiji") else ""
             tj_tag = "☯️ 轉陽：" if rev.get("is_taiji") else "底部反轉："
-            rev_html = f'<div class="rev-bull{tj_cls}"><span class="dot-red"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}</span></div>'
+            rev_html = f'<div class="rev-bull{tj_cls}"><span class="dot-red"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
             tj_cls = " rev-taiji-bear" if rev.get("is_taiji") else ""
             tj_tag = "☯️ 轉陰：" if rev.get("is_taiji") else "高檔反轉："
-            rev_html = f'<div class="rev-bear{tj_cls}"><span class="dot-green"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}</span></div>'
+            rev_html = f'<div class="rev-bear{tj_cls}"><span class="dot-green"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
 
         row_str = (
             f'<div class="tf-row tabular">'

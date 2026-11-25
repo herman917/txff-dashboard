@@ -287,19 +287,13 @@ def _candle_metrics(c: Dict[str, Any]) -> Dict[str, float]:
     }
 
 
-def detect_reversal_signal(
+def _detect_reversal_at_tip(
     candles: List[Dict[str, Any]],
     ratio_info: Dict[str, Any],
     swing_high: Optional[float],
     swing_low: Optional[float],
 ) -> Dict[str, Any]:
-    """
-    結合「前波位置」與「太極陰陽學 K 線型態」判定亮燈提醒：
-    - 位於前波底部附近 (-20% ~ 25%) + 轉陽型態 -> 紅色亮燈 (bull_reversal)
-      包含：破底翻、多頭島型反轉、多頭吞噬(完全包含)、多頭貫穿(>50%)、鎚子(實體頂端不管紅黑)
-    - 位於前波高點附近 (75% ~ 120%) + 轉陰型態 -> 綠色亮燈 (bear_reversal)
-      包含：假突破翻黑、空頭島型反轉、空頭吞噬(完全包含)、烏雲罩日(>50%)、流星(實體底端)、吊人
-    """
+    """檢查 candles 最後一根位置是否符合底部轉陽或高檔轉陰反轉型態（單點判定）"""
     pos = ratio_info.get("value")
     if not candles or pos is None or swing_high is None or swing_low is None:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
@@ -395,6 +389,70 @@ def detect_reversal_signal(
             return {"signal": "bear_reversal", "pattern": "吊人", "zone": "top", "is_taiji": True}
 
     return {"signal": "none", "pattern": None, "zone": "top", "is_taiji": False}
+
+
+def detect_reversal_signal(
+    candles: List[Dict[str, Any]],
+    ratio_info: Dict[str, Any],
+    swing_high: Optional[float],
+    swing_low: Optional[float],
+    lookback_bars: int = 6,
+) -> Dict[str, Any]:
+    """
+    掃描最近 6T（6 根 K 線）的反轉訊號並實作保留機制：
+    - 亮燈保留最多 6T（例如 5分K=30分鐘、15分K=90分鐘），直到「超過 6T」或「波浪觸及對向頂/底（>=75% 或 <=25%）或出現反向訊號」為止。
+    - 若 6T 內重複出現同向反轉型態，回傳 repeat_count 供前端於旁邊顯示次數（如 ×2）。
+    """
+    if not candles or swing_high is None or swing_low is None or swing_high <= swing_low:
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
+
+    span = swing_high - swing_low
+    max_offset = min(lookback_bars - 1, len(candles) - 1)
+    hits: List[Dict[str, Any]] = []
+
+    for offset in range(0, max_offset + 1):
+        sub = candles[: len(candles) - offset]
+        tip_price = sub[-1]["close"]
+        sub_ratio = calculate_price_ratio(tip_price, swing_high, swing_low) if offset > 0 else ratio_info
+        sig = _detect_reversal_at_tip(sub, sub_ratio, swing_high, swing_low)
+        if sig["signal"] != "none":
+            hits.append({**sig, "offset": offset})
+
+    if not hits:
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
+
+    latest = hits[0]  # 距離現在最近的一次反轉訊號
+    target_sig = latest["signal"]
+    latest_offset = latest["offset"]
+
+    # 若為先前 K 線觸發的保留訊號 (offset > 0)，檢查之後是否已「波浪觸頂/觸底反轉」
+    if latest_offset > 0:
+        after_candles = candles[len(candles) - latest_offset :]
+        if target_sig == "bull_reversal":
+            # 底部轉陽後若波浪已觸及高檔 (>= 75%)，代表該波完成，熄滅舊燈
+            if any((c["high"] - swing_low) / span >= 0.75 for c in after_candles):
+                return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
+        elif target_sig == "bear_reversal":
+            # 高檔轉陰後若波浪已觸及底部 (<= 25%)，代表該波完成，熄滅舊燈
+            if any((c["low"] - swing_low) / span <= 0.25 for c in after_candles):
+                return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
+
+    # 計算 6T 內同向重複出現次數（遇到反向訊號即停止累計）
+    repeat_count = 0
+    for h in hits:
+        if h["signal"] == target_sig:
+            repeat_count += 1
+        else:
+            break
+
+    return {
+        "signal": latest["signal"],
+        "pattern": latest["pattern"],
+        "zone": latest["zone"],
+        "is_taiji": latest["is_taiji"],
+        "repeat_count": repeat_count,
+        "bars_ago": latest_offset,
+    }
 
 
 def evaluate_taiji_resonance(timeframes: List[Dict[str, Any]]) -> Dict[str, str]:

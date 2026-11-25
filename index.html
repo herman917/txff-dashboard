@@ -406,14 +406,22 @@
       const { label, threshold_pct, latest_candle, swing_high, swing_low, is_fallback_pivot, ratio, streak, reversal } = tf;
 
       let reversalHtml = '';
-      if (reversal && reversal.signal === 'bull_reversal') {
-        const tjTag = reversal.is_taiji ? '☯️ 轉陽：' : '底部反轉：';
-        const tjRing = reversal.is_taiji ? ' shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70' : '';
-        reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}</span></div>`;
-      } else if (reversal && reversal.signal === 'bear_reversal') {
-        const tjTag = reversal.is_taiji ? '☯️ 轉陰：' : '高檔反轉：';
-        const tjRing = reversal.is_taiji ? ' shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70' : '';
-        reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}</span></div>`;
+      if (reversal && reversal.signal !== 'none') {
+        const repBadge = (reversal.repeat_count || 1) > 1
+          ? `<span class="ml-1 px-1.5 rounded bg-white/20 text-white font-black">×${reversal.repeat_count}</span>`
+          : '';
+        const agoText = (reversal.bars_ago || 0) > 0
+          ? `<span class="ml-1 opacity-80">(${reversal.bars_ago}T前)</span>`
+          : '';
+        if (reversal.signal === 'bull_reversal') {
+          const tjTag = reversal.is_taiji ? '☯️ 轉陽：' : '底部反轉：';
+          const tjRing = reversal.is_taiji ? ' shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70' : '';
+          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}${repBadge}${agoText}</span></div>`;
+        } else if (reversal.signal === 'bear_reversal') {
+          const tjTag = reversal.is_taiji ? '☯️ 轉陰：' : '高檔反轉：';
+          const tjRing = reversal.is_taiji ? ' shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70' : '';
+          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}${repBadge}${agoText}</span></div>`;
+        }
       }
 
       // 狀態標籤樣式

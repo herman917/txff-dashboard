@@ -534,12 +534,17 @@ def evaluate_all_timeframes(
         threshold = active_thresholds.get(tf_key, tf_cfg["default_threshold"])
         candles = candles_by_tf.get(tf_key, [])
 
-        swing_high, swing_low, is_fallback = calculate_zigzag_pivots(candles, threshold)
+        # 所有指標判定（ZigZag 轉折、連紅/連黑陰陽狀態、反轉型態）皆須等 K 線收線完成才算確認
+        confirmed_candles = candles
+        if candles and not _is_candle_completed(candles[-1]["timestamp"], tf_key):
+            confirmed_candles = candles[:-1]
+
+        swing_high, swing_low, is_fallback = calculate_zigzag_pivots(confirmed_candles, threshold)
         ratio_info = calculate_price_ratio(current_price, swing_high, swing_low)
-        streak_info = calculate_candle_streak(candles)
+        streak_info = calculate_candle_streak(confirmed_candles)
         reversal_info = detect_reversal_signal(candles, ratio_info, swing_high, swing_low, tf_key=tf_key)
 
-        latest_candle = candles[-1] if candles else None
+        latest_candle = confirmed_candles[-1] if confirmed_candles else (candles[-1] if candles else None)
 
         results.append({
             "timeframe": tf_key,

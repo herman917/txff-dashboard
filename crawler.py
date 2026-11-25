@@ -354,6 +354,10 @@ class TaiexMarketService:
                 elif dt > now + timedelta(minutes=5):
                     dt -= timedelta(days=1)
 
+                # TAIFEX getChartData1M 的 T 為該根 1 分 K「結束時間」(例：204600 代表 20:45~20:46)，
+                # 減去 1 分鐘對齊成 K 線「起始時間」，才能正確歸類到對應的 5分/15分/30分/60分 K 線。
+                dt -= timedelta(minutes=1)
+
                 candles.append({
                     "timestamp": int(dt.timestamp()),
                     "open": round(float(row[1]), 2),
@@ -671,11 +675,27 @@ class TaiexMarketService:
                 return
 
             txf_res = await self._fetch_taifex_txf_quote(market_type)
+            txf_1m: List[Dict[str, Any]] = []
+            if txf_res and txf_res.get("symbol_id") and (market_open or force):
+                txf_1m = await self._fetch_taifex_1m_candles(
+                    txf_res["symbol_id"],
+                    is_night=(market_type == "1"),
+                )
+
             async with self._lock:
                 if txf_res is not None:
                     fetched_price = txf_res["price"]
                     fetched_prev = txf_res["previous_close"]
                     fetched_ts = txf_res["market_time"]
+                    if txf_1m:
+                        first_ts = txf_1m[0]["timestamp"]
+                        for tf_key in ("5m", "15m", "30m", "60m"):
+                            txf_tf = self._resample_candles(txf_1m, tf_key)
+                            hist_part = [
+                                c for c in self.candles_by_target["TXFF"][tf_key]
+                                if c["timestamp"] < get_bucket_start_ts(first_ts, tf_key)
+                            ]
+                            self.candles_by_target["TXFF"][tf_key] = hist_part + txf_tf
                     if market_open:
                         self._apply_tick_to_candles("TXFF", fetched_price, fetched_ts)
                     self._update_quote_state(

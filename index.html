@@ -385,8 +385,33 @@
       container.innerHTML = timeframes.map(renderTimeframeRow).join('');
     }
 
+    function getPatternSvg(pattern) {
+      const svgs = {
+        '錘頭線': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
+        '倒錘頭線': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
+        '看漲吞噬': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#10b981" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#10b981"/><line x1="19" y1="2" x2="19" y2="18" stroke="#f43f5e" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#f43f5e"/></svg>',
+        '早晨之星': '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="3" width="5" height="9" rx="1" fill="#10b981"/><rect x="11.5" y="13" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="4" width="5" height="10" rx="1" fill="#f43f5e"/></svg>',
+        '三個白武士': '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="11" width="5" height="7" rx="1" fill="#f43f5e"/><rect x="11.5" y="7" width="5" height="8" rx="1" fill="#f43f5e"/><rect x="20" y="2" width="5" height="9" rx="1" fill="#f43f5e"/></svg>',
+        '破底翻': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="12" x2="26" y2="12" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,8 Q10,19 16,13 T25,4" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/><polyline points="21,4 25,4 25,8" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        '流星線': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        '吊人線': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        '看跌吞噬': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#f43f5e" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#f43f5e"/><line x1="19" y1="2" x2="19" y2="18" stroke="#10b981" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#10b981"/></svg>',
+        '黃昏之星': '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="8" width="5" height="9" rx="1" fill="#f43f5e"/><rect x="11.5" y="3" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="6" width="5" height="10" rx="1" fill="#10b981"/></svg>',
+        '三隻烏鴉': '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="2" width="5" height="8" rx="1" fill="#10b981"/><rect x="11.5" y="6" width="5" height="8" rx="1" fill="#10b981"/><rect x="20" y="10" width="5" height="8" rx="1" fill="#10b981"/></svg>',
+        '假突破翻黑': '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      };
+      return svgs[pattern] || '';
+    }
+
     function renderTimeframeRow(tf) {
-      const { label, threshold_pct, latest_candle, swing_high, swing_low, is_fallback_pivot, ratio, streak } = tf;
+      const { label, threshold_pct, latest_candle, swing_high, swing_low, is_fallback_pivot, ratio, streak, reversal } = tf;
+
+      let reversalHtml = '';
+      if (reversal && reversal.signal === 'bull_reversal') {
+        reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/60"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>底部反轉：${reversal.pattern}</span></div>`;
+      } else if (reversal && reversal.signal === 'bear_reversal') {
+        reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/60"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>高檔反轉：${reversal.pattern}</span></div>`;
+      }
 
       // 狀態標籤樣式
       let statusBadgeHtml = '';
@@ -482,6 +507,7 @@
               <span>前高 <span class="text-rose-300/90 font-medium">${formatNumber(swing_high)}</span></span>
               <span>前低 <span class="text-emerald-300/90 font-medium">${formatNumber(swing_low)}</span></span>
             </div>
+            ${reversalHtml}
           </div>
 
           <!-- 4. 多空力道視覺化長條（雙向進度條） -->

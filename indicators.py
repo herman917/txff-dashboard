@@ -270,6 +270,144 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _candle_metrics(c: Dict[str, Any]) -> Dict[str, float]:
+    """計算單根 K 線實體、上下影線與振幅"""
+    o, h, l, cl = c["open"], c["high"], c["low"], c["close"]
+    body = abs(cl - o)
+    rng = max(h - l, 0.0)
+    upper_wick = h - max(o, cl)
+    lower_wick = min(o, cl) - l
+    return {
+        "body": body,
+        "rng": rng,
+        "upper": upper_wick,
+        "lower": lower_wick,
+        "is_bull": cl > o,
+        "is_bear": cl < o,
+    }
+
+
+def detect_reversal_signal(
+    candles: List[Dict[str, Any]],
+    ratio_info: Dict[str, Any],
+    swing_high: Optional[float],
+    swing_low: Optional[float],
+) -> Dict[str, Any]:
+    """
+    結合「前波位置」與「K 線反轉型態」判定是否亮燈提醒：
+    - 位於前波底部附近 (-20% ~ 25%) + 往上反轉型態 -> 紅色亮燈 (bull_reversal)
+    - 位於前波高點附近 (75% ~ 120%) + 往下反轉型態 -> 綠色亮燈 (bear_reversal)
+    """
+    pos = ratio_info.get("value")
+    if not candles or pos is None or swing_high is None or swing_low is None:
+        return {"signal": "none", "pattern": None, "zone": "mid"}
+
+    is_near_bottom = -0.20 <= pos <= 0.25
+    is_near_top = 0.75 <= pos <= 1.20
+
+    if not is_near_bottom and not is_near_top:
+        return {"signal": "none", "pattern": None, "zone": "mid"}
+
+    c1 = candles[-1]
+    m1 = _candle_metrics(c1)
+
+    if is_near_bottom:
+        # 1. 破底翻：跌破前波低後迅速站回前波低之上
+        if c1["low"] < swing_low and c1["close"] > swing_low:
+            return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom"}
+        if len(candles) >= 2:
+            c2 = candles[-2]
+            m2 = _candle_metrics(c2)
+            if c2["low"] < swing_low and c1["close"] > swing_low and m1["is_bull"]:
+                return {"signal": "bull_reversal", "pattern": "破底翻", "zone": "bottom"}
+            # 2. 看漲吞噬（多頭吞噬）
+            if (
+                m2["is_bear"] and m1["is_bull"]
+                and c1["open"] <= c2["close"]
+                and c1["close"] >= c2["open"]
+                and m1["body"] > m2["body"]
+            ):
+                return {"signal": "bull_reversal", "pattern": "看漲吞噬", "zone": "bottom"}
+
+        if len(candles) >= 3:
+            c2, c3 = candles[-2], candles[-3]
+            m2, m3 = _candle_metrics(c2), _candle_metrics(c3)
+            # 3. 早晨之星（晨星）
+            if (
+                m3["is_bear"] and m3["rng"] > 0 and m3["body"] > 0.4 * m3["rng"]
+                and m2["body"] < 0.35 * m3["rng"]
+                and m1["is_bull"] and c1["close"] > (c3["open"] + c3["close"]) / 2
+            ):
+                return {"signal": "bull_reversal", "pattern": "早晨之星", "zone": "bottom"}
+            # 4. 三個白武士
+            if (
+                m3["is_bull"] and m2["is_bull"] and m1["is_bull"]
+                and c1["close"] > c2["close"] > c3["close"]
+                and m1["rng"] > 0 and m2["rng"] > 0 and m3["rng"] > 0
+                and m1["body"] >= 0.45 * m1["rng"]
+                and m2["body"] >= 0.45 * m2["rng"]
+                and m3["body"] >= 0.45 * m3["rng"]
+            ):
+                return {"signal": "bull_reversal", "pattern": "三個白武士", "zone": "bottom"}
+
+        # 5. 錘頭線 / 6. 倒錘頭線
+        if m1["rng"] > 0 and m1["body"] <= 0.35 * m1["rng"]:
+            if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.25 * m1["rng"]:
+                return {"signal": "bull_reversal", "pattern": "錘頭線", "zone": "bottom"}
+            if m1["upper"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["lower"] <= 0.25 * m1["rng"]:
+                return {"signal": "bull_reversal", "pattern": "倒錘頭線", "zone": "bottom"}
+
+        return {"signal": "none", "pattern": None, "zone": "bottom"}
+
+    # is_near_top: 高點往下反轉型態 -> 綠色亮燈
+    if c1["high"] > swing_high and c1["close"] < swing_high:
+        return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top"}
+
+    if len(candles) >= 2:
+        c2 = candles[-2]
+        m2 = _candle_metrics(c2)
+        if c2["high"] > swing_high and c1["close"] < swing_high and m1["is_bear"]:
+            return {"signal": "bear_reversal", "pattern": "假突破翻黑", "zone": "top"}
+        # 看跌吞噬（空頭吞噬）
+        if (
+            m2["is_bull"] and m1["is_bear"]
+            and c1["open"] >= c2["close"]
+            and c1["close"] <= c2["open"]
+            and m1["body"] > m2["body"]
+        ):
+            return {"signal": "bear_reversal", "pattern": "看跌吞噬", "zone": "top"}
+
+    if len(candles) >= 3:
+        c2, c3 = candles[-2], candles[-3]
+        m2, m3 = _candle_metrics(c2), _candle_metrics(c3)
+        # 黃昏之星
+        if (
+            m3["is_bull"] and m3["rng"] > 0 and m3["body"] > 0.4 * m3["rng"]
+            and m2["body"] < 0.35 * m3["rng"]
+            and m1["is_bear"] and c1["close"] < (c3["open"] + c3["close"]) / 2
+        ):
+            return {"signal": "bear_reversal", "pattern": "黃昏之星", "zone": "top"}
+        # 三隻烏鴉
+        if (
+            m3["is_bear"] and m2["is_bear"] and m1["is_bear"]
+            and c1["close"] < c2["close"] < c3["close"]
+            and m1["rng"] > 0 and m2["rng"] > 0 and m3["rng"] > 0
+            and m1["body"] >= 0.45 * m1["rng"]
+            and m2["body"] >= 0.45 * m2["rng"]
+            and m3["body"] >= 0.45 * m3["rng"]
+        ):
+            return {"signal": "bear_reversal", "pattern": "三隻烏鴉", "zone": "top"}
+
+    # 流星線 / 吊人線
+    if m1["rng"] > 0 and m1["body"] <= 0.35 * m1["rng"]:
+        if m1["upper"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["lower"] <= 0.25 * m1["rng"]:
+            return {"signal": "bear_reversal", "pattern": "流星線", "zone": "top"}
+        if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.25 * m1["rng"]:
+            return {"signal": "bear_reversal", "pattern": "吊人線", "zone": "top"}
+
+    return {"signal": "none", "pattern": None, "zone": "top"}
+
+
 def evaluate_all_timeframes(
     candles_by_tf: Dict[str, List[Dict[str, Any]]],
     current_price: float,
@@ -290,6 +428,7 @@ def evaluate_all_timeframes(
         swing_high, swing_low, is_fallback = calculate_zigzag_pivots(candles, threshold)
         ratio_info = calculate_price_ratio(current_price, swing_high, swing_low)
         streak_info = calculate_candle_streak(candles)
+        reversal_info = detect_reversal_signal(candles, ratio_info, swing_high, swing_low)
 
         latest_candle = candles[-1] if candles else None
 
@@ -304,6 +443,7 @@ def evaluate_all_timeframes(
             "is_fallback_pivot": is_fallback,
             "ratio": ratio_info,
             "streak": streak_info,
+            "reversal": reversal_info,
         })
 
     return results

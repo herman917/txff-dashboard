@@ -120,6 +120,28 @@ st.markdown(
         background: rgba(71,85,105,0.8); border-left: 2px solid #34d399; border-radius: 3px 0 0 3px;
       }
       .tabular { font-variant-numeric: tabular-nums; }
+      @keyframes pulseGlow {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.55; transform: scale(1.18); }
+      }
+      .rev-bull {
+        display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        background: rgba(225,29,72,0.22); color: #fda4af; border: 1px solid rgba(244,63,94,0.65);
+      }
+      .rev-bear {
+        display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        background: rgba(5,150,105,0.22); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.65);
+      }
+      .dot-red {
+        width: 8px; height: 8px; border-radius: 50%; background: #f43f5e;
+        box-shadow: 0 0 8px #f43f5e; animation: pulseGlow 1.3s infinite;
+      }
+      .dot-green {
+        width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+        box-shadow: 0 0 8px #10b981; animation: pulseGlow 1.3s infinite;
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -206,6 +228,25 @@ def _fmt(val) -> str:
     return f"{val:,.2f}"
 
 
+def _pattern_svg(pattern: str) -> str:
+    """回傳對應反轉型態的迷你 K 線 / 波浪 SVG 圖示 (28x20)"""
+    svgs = {
+        "錘頭線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
+        "倒錘頭線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#f43f5e" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#f43f5e"/></svg>',
+        "看漲吞噬": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#10b981" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#10b981"/><line x1="19" y1="2" x2="19" y2="18" stroke="#f43f5e" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#f43f5e"/></svg>',
+        "早晨之星": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="3" width="5" height="9" rx="1" fill="#10b981"/><rect x="11.5" y="13" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="4" width="5" height="10" rx="1" fill="#f43f5e"/></svg>',
+        "三個白武士": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="11" width="5" height="7" rx="1" fill="#f43f5e"/><rect x="11.5" y="7" width="5" height="8" rx="1" fill="#f43f5e"/><rect x="20" y="2" width="5" height="9" rx="1" fill="#f43f5e"/></svg>',
+        "破底翻": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="12" x2="26" y2="12" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,8 Q10,19 16,13 T25,4" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/><polyline points="21,4 25,4 25,8" fill="none" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        "流星線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="2" x2="14" y2="17" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="12" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        "吊人線": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="14" y1="3" x2="14" y2="18" stroke="#10b981" stroke-width="1.6"/><rect x="10" y="3" width="8" height="5" rx="1" fill="#10b981"/></svg>',
+        "看跌吞噬": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="8" y1="6" x2="8" y2="15" stroke="#f43f5e" stroke-width="1.4"/><rect x="5" y="7" width="6" height="6" rx="1" fill="#f43f5e"/><line x1="19" y1="2" x2="19" y2="18" stroke="#10b981" stroke-width="1.4"/><rect x="15" y="3" width="8" height="14" rx="1" fill="#10b981"/></svg>',
+        "黃昏之星": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="8" width="5" height="9" rx="1" fill="#f43f5e"/><rect x="11.5" y="3" width="5" height="4" rx="1" fill="#fbbf24"/><rect x="20" y="6" width="5" height="10" rx="1" fill="#10b981"/></svg>',
+        "三隻烏鴉": '<svg width="28" height="20" viewBox="0 0 28 20"><rect x="3" y="2" width="5" height="8" rx="1" fill="#10b981"/><rect x="11.5" y="6" width="5" height="8" rx="1" fill="#10b981"/><rect x="20" y="10" width="5" height="8" rx="1" fill="#10b981"/></svg>',
+        "假突破翻黑": '<svg width="28" height="20" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    }
+    return svgs.get(pattern, "")
+
+
 @st.fragment(run_every=timedelta(seconds=interval_sec))
 def render_live_board(target: str, force: bool) -> None:
     if service.active_target != target:
@@ -280,6 +321,15 @@ def render_live_board(target: str, force: bool) -> None:
         else:
             bar_inner = '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:#64748b;">十字盤整</span>'
 
+        rev = tf.get("reversal") or {}
+        rev_html = ""
+        if rev.get("signal") == "bull_reversal":
+            svg_icon = _pattern_svg(rev["pattern"])
+            rev_html = f'<div class="rev-bull"><span class="dot-red"></span>{svg_icon}<span>底部反轉：{rev["pattern"]}</span></div>'
+        elif rev.get("signal") == "bear_reversal":
+            svg_icon = _pattern_svg(rev["pattern"])
+            rev_html = f'<div class="rev-bear"><span class="dot-green"></span>{svg_icon}<span>高檔反轉：{rev["pattern"]}</span></div>'
+
         row_str = (
             f'<div class="tf-row tabular">'
             f'<div class="tf-col-name">'
@@ -290,6 +340,7 @@ def render_live_board(target: str, force: bool) -> None:
             f'<div class="tf-col-ratio">'
             f'<div style="font-size:15px;font-weight:700;color:{ratio_color};">{ratio["display"]}</div>'
             f'<div style="font-size:11px;color:#94a3b8;">前高 {_fmt(tf["swing_high"])} / 前低 {_fmt(tf["swing_low"])}</div>'
+            f'{rev_html}'
             f'</div>'
             f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div></div>'
             f'</div>'

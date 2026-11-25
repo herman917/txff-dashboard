@@ -455,7 +455,7 @@ def detect_reversal_signal(
     }
 
 
-def evaluate_taiji_resonance(timeframes: List[Dict[str, Any]]) -> Dict[str, str]:
+def evaluate_taiji_resonance(timeframes: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     依太極陰陽學「操作要領」判定 週K 與 日K 共振信號：
     - 週(+) and 日(+)：快買進
@@ -466,16 +466,18 @@ def evaluate_taiji_resonance(timeframes: List[Dict[str, Any]]) -> Dict[str, str]
     tf_map = {tf["timeframe"]: tf["streak"]["streak"] for tf in timeframes}
     wk_s = tf_map.get("1wk", 0)
     d_s = tf_map.get("1d", 0)
+    wk_sign = 1 if wk_s > 0 else (-1 if wk_s < 0 else 0)
+    d_sign = 1 if d_s > 0 else (-1 if d_s < 0 else 0)
 
     if wk_s > 0 and d_s > 0:
-        return {"code": "buy_fast", "label": "週(+) 日(+)：快買進", "tone": "bull"}
+        return {"code": "buy_fast", "action": "快買進", "label": "週(+) 日(+)：快買進", "tone": "bull", "wk_sign": wk_sign, "d_sign": d_sign}
     if wk_s < 0 and d_s < 0:
-        return {"code": "sell_fast", "label": "週(-) 日(-)：快賣出", "tone": "bear"}
+        return {"code": "sell_fast", "action": "快賣出", "label": "週(-) 日(-)：快賣出", "tone": "bear", "wk_sign": wk_sign, "d_sign": d_sign}
     if wk_s > 0 and d_s < 0:
-        return {"code": "buy_dip", "label": "週(+) 日(-)：賤價買", "tone": "warn"}
+        return {"code": "buy_dip", "action": "賤價買", "label": "週(+) 日(-)：賤價買", "tone": "warn", "wk_sign": wk_sign, "d_sign": d_sign}
     if wk_s < 0 and d_s > 0:
-        return {"code": "rebound_caution", "label": "週(-) 日(+)：反彈謹慎", "tone": "neutral"}
-    return {"code": "neutral", "label": "週/日盤整觀望", "tone": "neutral"}
+        return {"code": "rebound_caution", "action": "反彈謹慎", "label": "週(-) 日(+)：反彈謹慎", "tone": "neutral", "wk_sign": wk_sign, "d_sign": d_sign}
+    return {"code": "neutral", "action": "盤整觀望", "label": "週/日盤整觀望", "tone": "neutral", "wk_sign": wk_sign, "d_sign": d_sign}
 
 
 def evaluate_all_timeframes(

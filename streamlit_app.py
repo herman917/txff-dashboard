@@ -281,6 +281,17 @@ def render_live_board(target: str, force: bool) -> None:
     }
     res_bg, res_fg, res_bd = res_colors.get(taiji_res["tone"], res_colors["neutral"])
 
+    def _sign_dot(s: int) -> str:
+        if s > 0:
+            return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f43f5e;box-shadow:0 0 8px #f43f5e;vertical-align:middle;margin:0 2px;"></span>'
+        if s < 0:
+            return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;vertical-align:middle;margin:0 2px;"></span>'
+        return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin:0 2px;"></span>'
+
+    wk_dot = _sign_dot(taiji_res.get("wk_sign", 0))
+    d_dot = _sign_dot(taiji_res.get("d_sign", 0))
+    res_action = taiji_res.get("action", "")
+
     chg = quote["change"]
     chg_pct = quote["change_pct"]
     sign = "+" if chg > 0 else ""
@@ -308,8 +319,8 @@ def render_live_board(target: str, force: bool) -> None:
               <span style="font-size:42px; font-weight:900; color:{price_color};">{_fmt(quote['price'])}</span>
               <span style="font-size:20px; font-weight:800; color:{price_color};">{sign}{_fmt(chg)} ({sign}{chg_pct:.2f}%)</span>
             </div>
-            <div style="padding:5px 12px; border-radius:8px; font-size:14px; font-weight:700; background:{res_bg}; color:{res_fg}; border:1px solid {res_bd};">
-              ☯️ 太極共振：{taiji_res['label']}
+            <div style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:8px; font-size:14px; font-weight:700; background:{res_bg}; color:{res_fg}; border:1px solid {res_bd};">
+              <span>☯️ 太極共振：週</span>{wk_dot}<span>日</span>{d_dot}<span>{res_action}</span>
             </div>
           </div>
         </div>

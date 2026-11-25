@@ -96,14 +96,14 @@ def get_bucket_start_ts(ts: int, tf_key: str) -> int:
 
     if tf_key in ("5m", "15m", "30m", "60m"):
         minutes = int(tf_key.replace("m", ""))
-        # 台股從 09:00 開盤對齊分 K 區間
-        market_open = dt.replace(hour=9, minute=0, second=0, microsecond=0)
-        if dt < market_open:
-            bucket_dt = market_open
-        else:
-            elapsed_min = int((dt - market_open).total_seconds() // 60)
-            bucket_idx = elapsed_min // minutes
-            bucket_dt = market_open + timedelta(minutes=bucket_idx * minutes)
+        total_min = dt.hour * 60 + dt.minute
+        bucket_min = (total_min // minutes) * minutes
+        bucket_dt = dt.replace(
+            hour=bucket_min // 60,
+            minute=bucket_min % 60,
+            second=0,
+            microsecond=0,
+        )
         return int(bucket_dt.timestamp())
 
     if tf_key == "1d":
@@ -228,6 +228,36 @@ class TaiexMarketService:
 
             if attempt < retries - 1:
                 await asyncio.sleep(0.8 * (attempt + 1))
+
+        # 若 Yahoo API 持續 429 限流（常見於雲端共用 IP），自動切換 yfinance 備援
+        try:
+            import yfinance as yf
+
+            def _yf_fetch() -> Optional[Dict[str, Any]]:
+                df = yf.Ticker("^TWII").history(period=range_str, interval=interval, auto_adjust=False)
+                if df is None or df.empty:
+                    return None
+                ts_list = [int(idx.timestamp()) for idx in df.index]
+                return {
+                    "timestamp": ts_list,
+                    "indicators": {
+                        "quote": [{
+                            "open": df["Open"].tolist(),
+                            "high": df["High"].tolist(),
+                            "low": df["Low"].tolist(),
+                            "close": df["Close"].tolist(),
+                        }]
+                    },
+                    "meta": {},
+                }
+
+            yf_res = await asyncio.to_thread(_yf_fetch)
+            if yf_res:
+                logger.info(f"yfinance 備援抓取成功 ({interval}/{range_str})")
+                return yf_res
+        except Exception as exc:
+            logger.warning(f"yfinance 備援失敗 ({interval}/{range_str}): {exc}")
+
         return None
 
     async def _fetch_taifex_txf_quote(self, market_type: str = "0") -> Optional[Dict[str, Any]]:
@@ -281,6 +311,7 @@ class TaiexMarketService:
                         session_label = "夜盤" if market_type == "1" else "日盤"
                         contract_name = item.get("DispCName") or sym_id
                         return {
+                            "symbol_id": sym_id,
                             "price": price,
                             "previous_close": prev,
                             "market_time": ts,
@@ -290,6 +321,50 @@ class TaiexMarketService:
         except Exception as exc:
             logger.warning(f"TAIFEX TXF 報價抓取失敗 (MarketType={market_type}): {exc}")
         return None
+
+    async def _fetch_taifex_1m_candles(self, symbol_id: str, is_night: bool) -> List[Dict[str, Any]]:
+        """
+        向 TAIFEX MIS getChartData1M 抓取當盤（日盤或夜盤）1 分 K 歷史資料。
+        Ticks 格式：['HHMMSS', Open, High, Low, Close, Volume]
+        """
+        client = await self._get_client()
+        url = "https://mis.taifex.com.tw/futures/api/getChartData1M"
+        try:
+            resp = await client.post(url, json={"SymbolID": symbol_id}, headers=self._random_headers())
+            if resp.status_code != 200:
+                return []
+            ticks = resp.json().get("RtData", {}).get("Ticks", [])
+            if not ticks:
+                return []
+
+            now = datetime.now(TAIPEI_TZ)
+            candles: List[Dict[str, Any]] = []
+            for row in ticks:
+                if len(row) < 5:
+                    continue
+                t_str = str(row[0]).strip()
+                if len(t_str) != 6 or not t_str.isdigit():
+                    continue
+                hh, mm, ss = int(t_str[:2]), int(t_str[2:4]), int(t_str[4:6])
+                dt = now.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+                if is_night and hh >= 15 and now.hour < 6:
+                    dt -= timedelta(days=1)
+                elif not is_night and now.hour < 8:
+                    dt -= timedelta(days=1)
+                elif dt > now + timedelta(minutes=5):
+                    dt -= timedelta(days=1)
+
+                candles.append({
+                    "timestamp": int(dt.timestamp()),
+                    "open": round(float(row[1]), 2),
+                    "high": round(float(row[2]), 2),
+                    "low": round(float(row[3]), 2),
+                    "close": round(float(row[4]), 2),
+                })
+            return candles
+        except Exception as exc:
+            logger.warning(f"TAIFEX 1M K線抓取失敗 ({symbol_id}): {exc}")
+            return []
 
     async def _fetch_twse_mis_quote(self) -> Optional[Dict[str, Any]]:
         """備援資料源：臺灣證券交易所 MIS 加權指數即時資訊 (tse_t00.tw)"""
@@ -422,9 +497,32 @@ class TaiexMarketService:
             other_mt = "0" if market_type == "1" else "1"
             txf_quote = await self._fetch_taifex_txf_quote(other_mt)
 
+        # 抓取 TXFF 當盤（日盤 + 夜盤）真實 1 分 K，補足台指期盤中/夜盤走勢
+        txf_1m_candles: List[Dict[str, Any]] = []
+        if txf_quote and txf_quote.get("symbol_id"):
+            sym_base = txf_quote["symbol_id"].rsplit("-", 1)[0]
+            day_1m, night_1m = await asyncio.gather(
+                self._fetch_taifex_1m_candles(f"{sym_base}-F", is_night=False),
+                self._fetch_taifex_1m_candles(f"{sym_base}-M", is_night=True),
+            )
+            txf_1m_candles = sorted(day_1m + night_1m, key=lambda x: x["timestamp"])
+            logger.info(f"TXFF 1分K 載入完成：日盤 {len(day_1m)} 根 + 夜盤 {len(night_1m)} 根")
+
         async with self._lock:
             self.candles_by_target["TXFF"] = copy.deepcopy(base_candles)
             self.candles_by_target["TWII"] = copy.deepcopy(base_candles)
+
+            # 將 TXFF 真實日/夜盤 1分K 重採樣併入 TXFF 的 5m / 15m / 30m / 60m
+            if txf_1m_candles:
+                first_txf_ts = txf_1m_candles[0]["timestamp"]
+                for tf_key in ("5m", "15m", "30m", "60m"):
+                    txf_tf = self._resample_candles(txf_1m_candles, tf_key)
+                    # 保留早於 TXFF 當盤起始時間的歷史基底，後面銜接真實 TXFF K 線
+                    hist_part = [
+                        c for c in self.candles_by_target["TXFF"][tf_key]
+                        if c["timestamp"] < get_bucket_start_ts(first_txf_ts, tf_key)
+                    ]
+                    self.candles_by_target["TXFF"][tf_key] = hist_part + txf_tf
 
             daily = base_candles["1d"]
 

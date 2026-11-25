@@ -7,7 +7,11 @@
 4. 多空陰陽狀態判定（十字線延續前一根顏色、連續紅/黑 K 計數）
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 # 7 個時框設定（由短到長排列，對應前端顯示順序）
 TIMEFRAME_CONFIG: List[Dict[str, Any]] = [
@@ -317,12 +321,13 @@ def _detect_reversal_at_tip(
     c1_top, c1_bot = max(c1["open"], c1["close"]), min(c1["open"], c1["close"])
 
     if is_near_bottom:
-        # 1. 多頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體向下跳空孤立
+        # 1. 多頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體須有明顯向下跳空缺口 (>= max(15點, 0.05%))
         if len(candles) >= 3:
             c2, c3 = candles[-2], candles[-3]
             c2_top = max(c2["open"], c2["close"])
             c3_bot = min(c3["open"], c3["close"])
-            if c2_top < c3_bot and c2_top < c1_bot:
+            min_gap = max(15.0, 0.0005 * c1["close"])
+            if (c3_bot - c2_top) >= min_gap and (c1_bot - c2_top) >= min_gap:
                 return {"signal": "bull_reversal", "pattern": "多頭島型反轉", "zone": "bottom", "is_taiji": True}
 
         if len(candles) >= 2:
@@ -355,12 +360,13 @@ def _detect_reversal_at_tip(
         return {"signal": "none", "pattern": None, "zone": "bottom", "is_taiji": False}
 
     # is_near_top: 轉陰（頭部型態）-> 綠色亮燈
-    # 1. 空頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體向上跳空孤立
+    # 1. 空頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體須有明顯向上跳空缺口 (>= max(15點, 0.05%))
     if len(candles) >= 3:
         c2, c3 = candles[-2], candles[-3]
         c2_bot = min(c2["open"], c2["close"])
         c3_top = max(c3["open"], c3["close"])
-        if c2_bot > c3_top and c2_bot > c1_top:
+        min_gap = max(15.0, 0.0005 * c1["close"])
+        if (c2_bot - c3_top) >= min_gap and (c2_bot - c1_top) >= min_gap:
             return {"signal": "bear_reversal", "pattern": "空頭島型反轉", "zone": "top", "is_taiji": True}
 
     if len(candles) >= 2:
@@ -391,29 +397,61 @@ def _detect_reversal_at_tip(
     return {"signal": "none", "pattern": None, "zone": "top", "is_taiji": False}
 
 
+def _is_candle_completed(candle_ts: int, tf_key: str, now_ts: Optional[int] = None) -> bool:
+    """判斷最新一根 K 線是否已經收線完成（未完成則不參與反轉型態亮燈判定）"""
+    now_dt = datetime.fromtimestamp(now_ts, tz=TAIPEI_TZ) if now_ts else datetime.now(TAIPEI_TZ)
+    c_dt = datetime.fromtimestamp(candle_ts, tz=TAIPEI_TZ)
+
+    if tf_key in ("5m", "15m", "30m", "60m"):
+        sec = int(tf_key.replace("m", "")) * 60
+        return int(now_dt.timestamp()) >= (candle_ts + sec)
+    if tf_key == "1d":
+        if now_dt.date() > c_dt.date():
+            return True
+        if now_dt.date() == c_dt.date():
+            return (now_dt.hour * 60 + now_dt.minute) >= (13 * 60 + 45)
+        return False
+    if tf_key == "1wk":
+        return now_dt.isocalendar()[:2] > c_dt.isocalendar()[:2]
+    if tf_key == "1mo":
+        return (now_dt.year, now_dt.month) > (c_dt.year, c_dt.month)
+    return True
+
+
 def detect_reversal_signal(
     candles: List[Dict[str, Any]],
     ratio_info: Dict[str, Any],
     swing_high: Optional[float],
     swing_low: Optional[float],
     lookback_bars: int = 6,
+    tf_key: Optional[str] = None,
+    now_ts: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    掃描最近 6T（6 根 K 線）的反轉訊號並實作保留機制：
-    - 亮燈保留最多 6T（例如 5分K=30分鐘、15分K=90分鐘），直到「超過 6T」或「波浪觸及對向頂/底（>=75% 或 <=25%）或出現反向訊號」為止。
+    掃描最近 6T（6 根已收線完成的 K 線）的反轉訊號並實作保留機制：
+    - 若最新一根 K 線尚未收線完成，自動排除之，待該根 K 線時間完成確認後才亮燈。
+    - 亮燈保留最多 6T，直到「超過 6T」或「波浪觸及對向頂/底（>=75% 或 <=25%）」為止。
     - 若 6T 內重複出現同向反轉型態，回傳 repeat_count 供前端於旁邊顯示次數（如 ×2）。
     """
     if not candles or swing_high is None or swing_low is None or swing_high <= swing_low:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
 
+    # 若指定 tf_key 且最新一根尚未收線完成，僅以已完成的 K 線判定型態
+    eval_candles = candles
+    if tf_key and not _is_candle_completed(candles[-1]["timestamp"], tf_key, now_ts):
+        eval_candles = candles[:-1]
+
+    if not eval_candles:
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
+
     span = swing_high - swing_low
-    max_offset = min(lookback_bars - 1, len(candles) - 1)
+    max_offset = min(lookback_bars - 1, len(eval_candles) - 1)
     hits: List[Dict[str, Any]] = []
 
     for offset in range(0, max_offset + 1):
-        sub = candles[: len(candles) - offset]
+        sub = eval_candles[: len(eval_candles) - offset]
         tip_price = sub[-1]["close"]
-        sub_ratio = calculate_price_ratio(tip_price, swing_high, swing_low) if offset > 0 else ratio_info
+        sub_ratio = calculate_price_ratio(tip_price, swing_high, swing_low) if (offset > 0 or len(eval_candles) < len(candles)) else ratio_info
         sig = _detect_reversal_at_tip(sub, sub_ratio, swing_high, swing_low)
         if sig["signal"] != "none":
             hits.append({**sig, "offset": offset})
@@ -421,19 +459,18 @@ def detect_reversal_signal(
     if not hits:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
 
-    latest = hits[0]  # 距離現在最近的一次反轉訊號
+    latest = hits[0]
     target_sig = latest["signal"]
     latest_offset = latest["offset"]
 
-    # 若為先前 K 線觸發的保留訊號 (offset > 0)，檢查之後是否已「波浪觸頂/觸底反轉」
-    if latest_offset > 0:
-        after_candles = candles[len(candles) - latest_offset :]
+    # 檢查觸發該訊號之後（含最新未完成 K 線）是否已「波浪觸頂/觸底反轉」
+    signal_end_idx = len(eval_candles) - latest_offset
+    after_candles = candles[signal_end_idx:]
+    if after_candles:
         if target_sig == "bull_reversal":
-            # 底部轉陽後若波浪已觸及高檔 (>= 75%)，代表該波完成，熄滅舊燈
             if any((c["high"] - swing_low) / span >= 0.75 for c in after_candles):
                 return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
         elif target_sig == "bear_reversal":
-            # 高檔轉陰後若波浪已觸及底部 (<= 25%)，代表該波完成，熄滅舊燈
             if any((c["low"] - swing_low) / span <= 0.25 for c in after_candles):
                 return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
 
@@ -500,7 +537,7 @@ def evaluate_all_timeframes(
         swing_high, swing_low, is_fallback = calculate_zigzag_pivots(candles, threshold)
         ratio_info = calculate_price_ratio(current_price, swing_high, swing_low)
         streak_info = calculate_candle_streak(candles)
-        reversal_info = detect_reversal_signal(candles, ratio_info, swing_high, swing_low)
+        reversal_info = detect_reversal_signal(candles, ratio_info, swing_high, swing_low, tf_key=tf_key)
 
         latest_candle = candles[-1] if candles else None
 

@@ -13,6 +13,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote as url_quote
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -201,15 +202,17 @@ class TaiexMarketService:
         self,
         interval: str,
         range_str: str,
+        symbol: str = "^TWII",
         retries: int = 3,
     ) -> Optional[Dict[str, Any]]:
         """
-        向 Yahoo Finance v8 Chart API 抓取 ^TWII 資料，含主機切換與重試機制。
+        向 Yahoo Finance v8 Chart API 抓取指定標的資料，含主機切換、重試與 yfinance 備援。
         """
         client = await self._get_client()
+        encoded_sym = url_quote(symbol, safe="")
         for attempt in range(retries):
             host = YAHOO_HOSTS[attempt % len(YAHOO_HOSTS)]
-            url = f"{host}/v8/finance/chart/%5ETWII"
+            url = f"{host}/v8/finance/chart/{encoded_sym}"
             params = {
                 "interval": interval,
                 "range": range_str,
@@ -222,7 +225,7 @@ class TaiexMarketService:
                     result = data.get("chart", {}).get("result")
                     if result and len(result) > 0:
                         return result[0]
-                logger.warning(f"Yahoo Chart HTTP {resp.status_code} ({interval}/{range_str})")
+                logger.warning(f"Yahoo Chart HTTP {resp.status_code} ({symbol} {interval}/{range_str})")
             except Exception as exc:
                 logger.warning(f"Yahoo Chart 請求失敗 ({attempt + 1}/{retries}): {exc}")
 
@@ -234,7 +237,7 @@ class TaiexMarketService:
             import yfinance as yf
 
             def _yf_fetch() -> Optional[Dict[str, Any]]:
-                df = yf.Ticker("^TWII").history(period=range_str, interval=interval, auto_adjust=False)
+                df = yf.Ticker(symbol).history(period=range_str, interval=interval, auto_adjust=False)
                 if df is None or df.empty:
                     return None
                 ts_list = [int(idx.timestamp()) for idx in df.index]
@@ -253,10 +256,10 @@ class TaiexMarketService:
 
             yf_res = await asyncio.to_thread(_yf_fetch)
             if yf_res:
-                logger.info(f"yfinance 備援抓取成功 ({interval}/{range_str})")
+                logger.info(f"yfinance 備援抓取成功 ({symbol} {interval}/{range_str})")
                 return yf_res
         except Exception as exc:
-            logger.warning(f"yfinance 備援失敗 ({interval}/{range_str}): {exc}")
+            logger.warning(f"yfinance 備援失敗 ({symbol} {interval}/{range_str}): {exc}")
 
         return None
 
@@ -397,6 +400,35 @@ class TaiexMarketService:
                         }
         except Exception as exc:
             logger.warning(f"TWSE MIS 備援抓取失敗: {exc}")
+        return None
+
+    async def _fetch_twse_stock_quote(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """向 TWSE MIS 抓取上市 (tse) 或上櫃 (otc) 個股即時/收盤報價"""
+        client = await self._get_client()
+        url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+        params = {"ex_ch": f"tse_{stock_code}.tw|otc_{stock_code}.tw", "json": "1", "delay": "0"}
+        try:
+            resp = await client.get(url, params=params, headers=self._random_headers())
+            if resp.status_code == 200:
+                for item in resp.json().get("msgArray", []):
+                    price_str = item.get("z") or item.get("y")
+                    prev_str = item.get("y")
+                    if price_str and price_str != "-":
+                        price = float(price_str)
+                        prev = float(prev_str) if prev_str and prev_str != "-" else price
+                        ts_ms = int(item.get("tlong", 0))
+                        ts = ts_ms // 1000 if ts_ms > 0 else int(datetime.now(TAIPEI_TZ).timestamp())
+                        name = item.get("n") or stock_code
+                        ex = "上市" if item.get("ex") == "tse" else "上櫃"
+                        return {
+                            "price": price,
+                            "previous_close": prev,
+                            "market_time": ts,
+                            "name": f"{name} ({stock_code})",
+                            "source": f"TWSE MIS ({ex})",
+                        }
+        except Exception as exc:
+            logger.warning(f"TWSE 個股報價抓取失敗 ({stock_code}): {exc}")
         return None
 
     @staticmethod
@@ -601,11 +633,17 @@ class TaiexMarketService:
         now = datetime.now(TAIPEI_TZ)
         change = round(price - previous_close, 2) if previous_close else 0.0
         change_pct = round((change / previous_close) * 100, 2) if previous_close else 0.0
-        symbol = "TXFF" if target == "TXFF" else "^TWII"
+        if target == "TXFF":
+            symbol = "TXFF"
+        elif target == "TWII":
+            symbol = "^TWII"
+        else:
+            symbol = target.split(":", 1)[1] if ":" in target else target
 
+        existing = self.quotes.get(target, {})
         self.quotes[target] = {
             "symbol": symbol,
-            "name": name or self.quotes[target].get("name", symbol),
+            "name": name or existing.get("name", symbol),
             "price": round(price, 2),
             "previous_close": round(previous_close, 2),
             "change": change,
@@ -718,48 +756,71 @@ class TaiexMarketService:
                     self.quotes["TXFF"]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
             return
 
-        # active == "TWII" (台股加權指數：優先使用 TWSE MIS 官方即時/收盤資訊)
+        # active == "TWII" 或 "STOCK:XXXX"
+        is_stock = active.startswith("STOCK:")
+        stock_code = active.split(":", 1)[1] if is_stock else ""
         market_open = is_taiwan_market_open(now)
-        if not market_open and not force and self.quotes["TWII"]["price"] > 0:
+
+        if not market_open and not force and self.quotes.get(active, {}).get("price", 0) > 0:
             async with self._lock:
-                self.quotes["TWII"]["is_market_open"] = False
-                self.quotes["TWII"]["is_cached"] = True
-                self.quotes["TWII"]["status_text"] = "非盤中/快取狀態"
-                self.quotes["TWII"]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+                self.quotes[active]["is_market_open"] = False
+                self.quotes[active]["is_cached"] = True
+                self.quotes[active]["status_text"] = "非盤中/快取狀態"
+                self.quotes[active]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
             return
 
         fetched_price: Optional[float] = None
         fetched_prev: Optional[float] = None
         fetched_ts: Optional[int] = None
         source = "TWSE MIS"
+        display_name = self.quotes.get(active, {}).get("name")
 
-        twse_res = await self._fetch_twse_mis_quote()
-        if twse_res:
-            fetched_price = twse_res["price"]
-            fetched_prev = twse_res["previous_close"]
-            fetched_ts = twse_res["market_time"]
-            source = twse_res["source"]
+        if is_stock:
+            st_res = await self._fetch_twse_stock_quote(stock_code)
+            if st_res:
+                fetched_price = st_res["price"]
+                fetched_prev = st_res["previous_close"]
+                fetched_ts = st_res["market_time"]
+                source = st_res["source"]
+                display_name = st_res["name"]
+            else:
+                for suffix in (".TW", ".TWO"):
+                    chart_res = await self._fetch_yahoo_chart("1m", "1d", symbol=f"{stock_code}{suffix}", retries=1)
+                    if chart_res and chart_res.get("meta", {}).get("regularMarketPrice"):
+                        meta = chart_res["meta"]
+                        fetched_price = float(meta["regularMarketPrice"])
+                        fetched_prev = float(meta.get("previousClose") or fetched_price)
+                        fetched_ts = int(meta.get("regularMarketTime") or now.timestamp())
+                        source = "Yahoo Finance"
+                        break
         else:
-            chart_res = await self._fetch_yahoo_chart("1m", "1d", retries=2)
-            if chart_res:
-                meta = chart_res.get("meta", {})
-                if meta.get("regularMarketPrice"):
-                    fetched_price = float(meta["regularMarketPrice"])
-                    fetched_prev = float(
-                        meta.get("previousClose")
-                        or meta.get("chartPreviousClose")
-                        or self.quotes["TWII"]["previous_close"]
-                        or fetched_price
-                    )
-                    fetched_ts = int(meta.get("regularMarketTime") or now.timestamp())
-                    source = "Yahoo Finance"
+            twse_res = await self._fetch_twse_mis_quote()
+            if twse_res:
+                fetched_price = twse_res["price"]
+                fetched_prev = twse_res["previous_close"]
+                fetched_ts = twse_res["market_time"]
+                source = twse_res["source"]
+            else:
+                chart_res = await self._fetch_yahoo_chart("1m", "1d", symbol="^TWII", retries=2)
+                if chart_res:
+                    meta = chart_res.get("meta", {})
+                    if meta.get("regularMarketPrice"):
+                        fetched_price = float(meta["regularMarketPrice"])
+                        fetched_prev = float(
+                            meta.get("previousClose")
+                            or meta.get("chartPreviousClose")
+                            or self.quotes["TWII"]["previous_close"]
+                            or fetched_price
+                        )
+                        fetched_ts = int(meta.get("regularMarketTime") or now.timestamp())
+                        source = "Yahoo Finance"
 
         async with self._lock:
             if fetched_price is not None and fetched_ts is not None:
                 if market_open:
-                    self._apply_tick_to_candles("TWII", fetched_price, fetched_ts)
+                    self._apply_tick_to_candles(active, fetched_price, fetched_ts)
                 self._update_quote_state(
-                    target="TWII",
+                    target=active,
                     price=fetched_price,
                     previous_close=fetched_prev or fetched_price,
                     market_ts=fetched_ts,
@@ -767,22 +828,96 @@ class TaiexMarketService:
                     is_cached=not market_open,
                     status_text="盤中即時" if market_open else "非盤中/快取狀態",
                     source=source,
-                    name="台灣加權指數 (^TWII)",
+                    name=display_name or ("台灣加權指數 (^TWII)" if not is_stock else stock_code),
                 )
-            else:
-                self.quotes["TWII"]["is_market_open"] = market_open
-                self.quotes["TWII"]["is_cached"] = True
-                self.quotes["TWII"]["status_text"] = (
+            elif active in self.quotes:
+                self.quotes[active]["is_market_open"] = market_open
+                self.quotes[active]["is_cached"] = True
+                self.quotes[active]["status_text"] = (
                     "快取狀態 (連線重試中)" if market_open else "非盤中/快取狀態"
                 )
-                self.quotes["TWII"]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+                self.quotes[active]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    async def set_target(self, target: str) -> None:
-        """切換目前監控標的 ('TXFF' 或 'TWII') 並立即刷新該標的報價"""
-        if target not in ("TXFF", "TWII"):
-            return
-        self.active_target = target
-        await self.poll_realtime_quote(target, force=True)
+    async def ensure_stock_loaded(self, stock_code: str) -> str:
+        """載入指定台股代號（如 2330）的 15m/30m/60m/1d/1wk 歷史 K 線與報價，回傳 target_key"""
+        code = stock_code.strip().upper().replace(".TW", "").replace(".TWO", "")
+        target_key = f"STOCK:{code}"
+        if target_key in self.candles_by_target and self.candles_by_target[target_key].get("1d"):
+            return target_key
+
+        res_5m = None
+        res_1d = None
+        for suffix in (".TW", ".TWO"):
+            sym = f"{code}{suffix}"
+            r5 = await self._fetch_yahoo_chart("5m", "1mo", symbol=sym, retries=2)
+            await asyncio.sleep(0.25)
+            r1 = await self._fetch_yahoo_chart("1d", "5y", symbol=sym, retries=2)
+            if r5 or r1:
+                res_5m, res_1d = r5, r1
+                break
+
+        candles_map: Dict[str, List[Dict[str, Any]]] = {tf: [] for tf in YAHOO_HISTORY_PARAMS}
+        if isinstance(res_5m, dict):
+            candles_map["5m"] = self._parse_yahoo_candles(res_5m)
+        if isinstance(res_1d, dict):
+            candles_map["1d"] = self._parse_yahoo_candles(res_1d)
+        if not candles_map["1d"] and candles_map["5m"]:
+            candles_map["1d"] = self._resample_candles(candles_map["5m"], "1d")
+
+        for sub_tf in ("15m", "30m", "60m"):
+            if candles_map["5m"]:
+                candles_map[sub_tf] = self._resample_candles(candles_map["5m"], sub_tf)
+        for macro_tf in ("1wk", "1mo"):
+            if candles_map["1d"]:
+                candles_map[macro_tf] = self._resample_candles(candles_map["1d"], macro_tf)
+
+        st_quote = await self._fetch_twse_stock_quote(code)
+        now = datetime.now(TAIPEI_TZ)
+        market_open = is_taiwan_market_open(now)
+
+        async with self._lock:
+            self.candles_by_target[target_key] = candles_map
+            daily = candles_map["1d"]
+            if st_quote:
+                price = st_quote["price"]
+                prev = st_quote["previous_close"]
+                ts = st_quote["market_time"]
+                name = st_quote["name"]
+                source = st_quote["source"]
+                self._apply_tick_to_candles(target_key, price, ts)
+            elif daily:
+                price = daily[-1]["close"]
+                prev = daily[-2]["close"] if len(daily) >= 2 else price
+                ts = daily[-1]["timestamp"]
+                name = code
+                source = "Yahoo Finance"
+            else:
+                price, prev, ts = 0.0, 0.0, int(now.timestamp())
+                name = f"{code} (查無資料)"
+                source = "N/A"
+
+            self._update_quote_state(
+                target=target_key,
+                price=price,
+                previous_close=prev,
+                market_ts=ts,
+                is_market_open=market_open,
+                is_cached=not market_open,
+                status_text="盤中即時" if market_open else "非盤中/快取狀態",
+                source=source,
+                name=name,
+            )
+        return target_key
+
+    async def set_target(self, target: str, stock_code: Optional[str] = None) -> None:
+        """切換目前監控標的 ('TXFF', 'TWII' 或 'STOCK' 搭配 stock_code)"""
+        if target == "STOCK" and stock_code:
+            key = await self.ensure_stock_loaded(stock_code)
+            self.active_target = key
+            await self.poll_realtime_quote(key, force=True)
+        elif target in ("TXFF", "TWII"):
+            self.active_target = target
+            await self.poll_realtime_quote(target, force=True)
 
     async def get_snapshot(self) -> Dict[str, Any]:
         """取得目前選擇標的之報價與 7 個時框 K 線快照"""

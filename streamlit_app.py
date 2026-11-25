@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 import streamlit as st
 
 from crawler import TaiexMarketService
-from indicators import DEFAULT_THRESHOLDS, TIMEFRAME_CONFIG, evaluate_all_timeframes, evaluate_taiji_resonance
+from indicators import evaluate_all_timeframes, evaluate_taiji_resonance
 
 st.set_page_config(
     page_title="台指期 / 大盤即時多空力道",
@@ -31,9 +31,13 @@ st.markdown(
       /* 強制所有原生元件文字在手機深色背景上保持高對比亮色 */
       .stRadio label, .stRadio p, .stRadio span,
       .stSelectbox label, .stSelectbox p,
-      .stExpander summary, .stExpander summary p, .stExpander label,
+      .stTextInput label, .stTextInput input,
       .stButton button, .stCaption, .stCaption p {
         color: #f8fafc !important;
+      }
+      .stTextInput input {
+        background-color: #0f172a !important;
+        border: 1px solid #334155 !important;
       }
       .stButton button {
         background-color: #1e293b !important;
@@ -178,10 +182,6 @@ def run_async(coro):
     with _loop_lock:
         return _bg_loop.run_until_complete(coro)
 
-# 初始化 ZigZag 閾值狀態
-if "thresholds" not in st.session_state:
-    st.session_state.thresholds = dict(DEFAULT_THRESHOLDS)
-
 # 頂部控制列（手機自動堆疊）
 INTERVAL_OPTIONS = {
     "10 秒": 10,
@@ -191,12 +191,12 @@ INTERVAL_OPTIONS = {
     "5 分鐘": 300,
 }
 
-c1, c2, c3 = st.columns([2, 1.5, 1])
+c1, c2, c3 = st.columns([2.2, 1.3, 1])
 with c1:
     target_choice = st.radio(
         "監控標的",
-        options=["TXFF", "TWII"],
-        format_func=lambda x: "台指期 (TXFF)" if x == "TXFF" else "台股大盤 (^TWII)",
+        options=["TXFF", "TWII", "STOCK"],
+        format_func=lambda x: "台指期 (TXFF)" if x == "TXFF" else ("台股大盤 (^TWII)" if x == "TWII" else "台股個股"),
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -210,28 +210,23 @@ with c2:
 with c3:
     force_clicked = st.button("立即更新", use_container_width=True)
 
-interval_sec = INTERVAL_OPTIONS[interval_label]
+stock_code_input = "2330"
+if target_choice == "STOCK":
+    sc1, sc2 = st.columns([3, 1])
+    with sc1:
+        stock_code_input = st.text_input(
+            "台股代號",
+            value=st.session_state.get("stock_code", "2330"),
+            placeholder="輸入台股代號 (例: 2330、2317、0050)",
+            label_visibility="collapsed",
+        ).strip()
+        if stock_code_input:
+            st.session_state["stock_code"] = stock_code_input
+    with sc2:
+        if st.button("查詢個股", use_container_width=True):
+            force_clicked = True
 
-# ZigZag 參數微調折疊區
-with st.expander("ZigZag 轉折閾值參數 (%)"):
-    cols = st.columns(len(TIMEFRAME_CONFIG))
-    updated_thresholds: Dict[str, float] = {}
-    for idx, cfg in enumerate(TIMEFRAME_CONFIG):
-        tf_key = cfg["key"]
-        with cols[idx]:
-            pct_val = st.number_input(
-                cfg["label"],
-                min_value=0.05,
-                max_value=30.0,
-                value=round(st.session_state.thresholds[tf_key] * 100, 2),
-                step=0.1,
-                key=f"zz_{tf_key}",
-            )
-            updated_thresholds[tf_key] = pct_val / 100.0
-    st.session_state.thresholds = updated_thresholds
-    if st.button("恢復預設參數"):
-        st.session_state.thresholds = dict(DEFAULT_THRESHOLDS)
-        st.rerun()
+interval_sec = INTERVAL_OPTIONS[interval_label]
 
 
 def _fmt(val) -> str:
@@ -254,23 +249,60 @@ def _pattern_svg(pattern: str) -> str:
         "烏雲罩日": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="5" width="6" height="12" rx="1" fill="#f43f5e"/><line x1="2" y1="11" x2="26" y2="11" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/><rect x="16" y="2" width="7" height="12" rx="1" fill="#10b981"/></svg>',
         "空頭島型反轉": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="2" y="12" width="5" height="6" rx="1" fill="#f43f5e"/><rect x="11.5" y="2" width="5" height="5" rx="1" fill="#fbbf24"/><rect x="21" y="11" width="5" height="7" rx="1" fill="#10b981"/><line x1="1" y1="9.5" x2="27" y2="9.5" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/></svg>',
         "假突破翻黑": '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        "連2陽K": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="6" y="9" width="6" height="8" rx="1" fill="#f43f5e"/><rect x="16" y="4" width="6" height="10" rx="1" fill="#f43f5e"/></svg>',
+        "連2陰K": '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="6" y="4" width="6" height="8" rx="1" fill="#10b981"/><rect x="16" y="7" width="6" height="10" rx="1" fill="#10b981"/></svg>',
     }
     return svgs.get(pattern, "")
 
 
+def _mini_kline_svg(mini_candles: list) -> str:
+    """繪製精簡縮小版 K 線走勢圖 (SVG 200x48)"""
+    if not mini_candles:
+        return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
+
+    w, h = 200, 48
+    pad_y = 4
+    hi = max(c["h"] for c in mini_candles)
+    lo = min(c["l"] for c in mini_candles)
+    span = max(hi - lo, 0.01)
+
+    def y_of(price: float) -> float:
+        return pad_y + (hi - price) / span * (h - 2 * pad_y)
+
+    n = len(mini_candles)
+    step = w / max(n, 1)
+    bar_w = max(3.0, min(8.0, step * 0.65))
+    elems = []
+    for i, c in enumerate(mini_candles):
+        cx = i * step + step / 2.0
+        yo, yh, yl, yc = y_of(c["o"]), y_of(c["h"]), y_of(c["l"]), y_of(c["c"])
+        col = "#f43f5e" if c["c"] > c["o"] else ("#10b981" if c["c"] < c["o"] else "#94a3b8")
+        op = "0.55" if c.get("forming") else "1"
+        body_top = min(yo, yc)
+        body_h = max(abs(yc - yo), 1.5)
+        elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.2" opacity="{op}"/>')
+        elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
+
+    return (
+        f'<svg width="100%" height="48" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
+        f'style="background:#020617;border:1px solid #1e293b;border-radius:6px;display:block;max-width:240px;">'
+        f'{"".join(elems)}</svg>'
+    )
+
+
 @st.fragment(run_every=timedelta(seconds=interval_sec))
-def render_live_board(target: str, force: bool) -> None:
-    if service.active_target != target:
-        run_async(service.set_target(target))
+def render_live_board(target: str, stock_code: str, force: bool) -> None:
+    expected_key = f"STOCK:{stock_code.strip().upper()}" if target == "STOCK" else target
+    if service.active_target != expected_key:
+        run_async(service.set_target(target, stock_code))
     else:
-        run_async(service.poll_realtime_quote(target, force=force))
+        run_async(service.poll_realtime_quote(expected_key, force=force))
 
     snap = run_async(service.get_snapshot())
     quote = snap["quote"]
     timeframes = evaluate_all_timeframes(
         candles_by_tf=snap["candles_by_tf"],
         current_price=quote["price"],
-        thresholds=st.session_state.thresholds,
     )
     taiji_res = evaluate_taiji_resonance(timeframes)
     res_colors = {
@@ -385,14 +417,10 @@ def render_live_board(target: str, force: bool) -> None:
 
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            tj_cls = " rev-taiji-bull" if rev.get("is_taiji") else ""
-            tj_tag = "☯️ 轉陽：" if rev.get("is_taiji") else "底部反轉："
-            rev_html = f'<div class="rev-bull{tj_cls}"><span class="dot-red"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
+            rev_html = f'<div class="rev-bull rev-taiji-bull"><span class="dot-red"></span>{svg_icon}<span>[在陽] 建議買進（{rev["pattern"]}）{rep_badge}{ago_text}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            tj_cls = " rev-taiji-bear" if rev.get("is_taiji") else ""
-            tj_tag = "☯️ 轉陰：" if rev.get("is_taiji") else "高檔反轉："
-            rev_html = f'<div class="rev-bear{tj_cls}"><span class="dot-green"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
+            rev_html = f'<div class="rev-bear rev-taiji-bear"><span class="dot-green"></span>{svg_icon}<span>[在陰] 建議賣出（{rev["pattern"]}）{rep_badge}{ago_text}</span></div>'
 
         # 最近最多 7 根已收線紅黑方塊 + 進行中(未收線) K 線紅黑狀況
         recent_colors = tf.get("recent_colors") or []
@@ -420,16 +448,16 @@ def render_live_board(target: str, force: bool) -> None:
             f'</div>'
         )
 
+        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [])
+
         row_str = (
             f'<div class="tf-row tabular">'
             f'<div class="tf-col-name">'
             f'<span style="font-size:19px;font-weight:800;color:#ffffff;">{tf["label"]}</span>'
-            f'<span style="margin-left:6px;font-size:13px;font-weight:600;color:#e2e8f0;background:#1e293b;padding:2px 7px;border-radius:4px;">ZZ {tf["threshold_pct"]}%</span>'
             f'</div>'
             f'<div class="tf-col-badge">{badge}</div>'
             f'<div class="tf-col-ratio">'
-            f'<div style="display:flex;align-items:center;flex-wrap:wrap;font-size:18px;font-weight:800;color:{ratio_color};"><span style="font-size:14px;font-weight:600;color:#cbd5e1;margin-right:5px;">距前底:</span>{ratio_text}{ratio_badge}</div>'
-            f'<div style="font-size:13.5px;font-weight:500;color:#cbd5e1;margin-top:2px;">前高 <span style="color:#fda4af;font-weight:700;">{_fmt(tf["swing_high"])}</span> / 前低 <span style="color:#6ee7b7;font-weight:700;">{_fmt(tf["swing_low"])}</span></div>'
+            f'{mini_kline_html}'
             f'{rev_html}'
             f'</div>'
             f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div>{strip_html}</div>'
@@ -438,7 +466,7 @@ def render_live_board(target: str, force: bool) -> None:
         rows_html.append(row_str)
 
     st.markdown(f'<div class="matrix-card">{"".join(rows_html)}</div>', unsafe_allow_html=True)
-    st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 前波位置 = (現價 - 前波底) / (前波高 - 前波底)")
+    st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 已收線確認才亮燈")
 
 
-render_live_board(target_choice, force_clicked)
+render_live_board(target_choice, stock_code_input, force_clicked)

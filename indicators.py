@@ -13,15 +13,13 @@ from zoneinfo import ZoneInfo
 
 TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
-# 7 個時框設定（由短到長排列，對應前端顯示順序）
+# 5 個時框設定（已移除 5分K 與 月K，由短到長排列）
 TIMEFRAME_CONFIG: List[Dict[str, Any]] = [
-    {"key": "5m", "label": "5分", "default_threshold": 0.003},    # 0.3%
     {"key": "15m", "label": "15分", "default_threshold": 0.004},  # 0.4%
     {"key": "30m", "label": "30分", "default_threshold": 0.005},  # 0.5%
     {"key": "60m", "label": "時", "default_threshold": 0.008},    # 0.8%
     {"key": "1d", "label": "日", "default_threshold": 0.030},     # 3.0%
     {"key": "1wk", "label": "週", "default_threshold": 0.040},    # 4.0%
-    {"key": "1mo", "label": "月", "default_threshold": 0.050},    # 5.0%
 ]
 
 DEFAULT_THRESHOLDS: Dict[str, float] = {
@@ -357,6 +355,10 @@ def _detect_reversal_at_tip(
         ):
             return {"signal": "bull_reversal", "pattern": "鎚子", "zone": "bottom", "is_taiji": True}
 
+        # 6. 連2陽K：底部區域連續 2 根紅 K
+        if len(candles) >= 2 and m1["is_bull"] and _candle_metrics(candles[-2])["is_bull"]:
+            return {"signal": "bull_reversal", "pattern": "連2陽K", "zone": "bottom", "is_taiji": True}
+
         return {"signal": "none", "pattern": None, "zone": "bottom", "is_taiji": False}
 
     # is_near_top: 轉陰（頭部型態）-> 綠色亮燈
@@ -393,6 +395,10 @@ def _detect_reversal_at_tip(
             return {"signal": "bear_reversal", "pattern": "流星", "zone": "top", "is_taiji": True}
         if m1["lower"] >= 2.0 * max(m1["body"], m1["rng"] * 0.05) and m1["upper"] <= 0.15 * m1["rng"]:
             return {"signal": "bear_reversal", "pattern": "吊人", "zone": "top", "is_taiji": True}
+
+    # 6. 連2陰K：頂部區域連續 2 根黑 K
+    if len(candles) >= 2 and m1["is_bear"] and _candle_metrics(candles[-2])["is_bear"]:
+        return {"signal": "bear_reversal", "pattern": "連2陰K", "zone": "top", "is_taiji": True}
 
     return {"signal": "none", "pattern": None, "zone": "top", "is_taiji": False}
 
@@ -554,7 +560,17 @@ def evaluate_all_timeframes(
             return "doji"
 
         recent_colors = [_candle_color(c) for c in confirmed_candles[-7:]]
-        forming_color = _candle_color(candles[-1]) if (candles and len(confirmed_candles) < len(candles)) else None
+        has_forming = bool(candles and len(confirmed_candles) < len(candles))
+        forming_color = _candle_color(candles[-1]) if has_forming else None
+
+        # 提供最近最多 18 根 K 線供前端繪製縮小 K 線走勢圖
+        mini_candles = [
+            {"o": c["open"], "h": c["high"], "l": c["low"], "c": c["close"], "forming": False}
+            for c in confirmed_candles[-17:]
+        ]
+        if has_forming:
+            lc = candles[-1]
+            mini_candles.append({"o": lc["open"], "h": lc["high"], "l": lc["low"], "c": lc["close"], "forming": True})
 
         results.append({
             "timeframe": tf_key,
@@ -570,6 +586,7 @@ def evaluate_all_timeframes(
             "reversal": reversal_info,
             "recent_colors": recent_colors,
             "forming_color": forming_color,
+            "mini_candles": mini_candles,
         })
 
     return results

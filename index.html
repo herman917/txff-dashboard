@@ -41,6 +41,14 @@
                   台股大盤 (^TWII)
                 </button>
               </div>
+              <div class="inline-flex items-center gap-1">
+                <input id="stock-code-input" type="text" placeholder="台股代號 (例: 2330)" maxlength="10"
+                       onkeydown="if(event.key==='Enter') queryStockCode()"
+                       class="w-32 px-2 py-1 text-xs rounded-md bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+                <button onclick="queryStockCode()" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition cursor-pointer">
+                  查詢
+                </button>
+              </div>
               <h1 id="index-title" class="text-lg sm:text-xl font-bold text-slate-100">台指期近月 (TXFF)</h1>
               <span id="market-status-badge" class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
                 <span id="market-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -89,40 +97,16 @@
             <button id="btn-refresh" onclick="manualRefresh()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
               立即更新
             </button>
-            <button id="btn-toggle-settings" onclick="toggleSettings()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition cursor-pointer">
-              ZigZag 參數
-            </button>
           </div>
-        </div>
-      </div>
-
-      <!-- 可收合的 ZigZag 轉折閾值調整面板 -->
-      <div id="settings-panel" class="hidden mt-4 pt-4 border-t border-slate-800">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <p class="text-xs text-slate-400">
-            調整各時框 ZigZag 轉折閾值（%）：數值越小對短期波動越敏感，數值越大則只捕捉主要波段高低點。
-          </p>
-          <div class="flex items-center gap-2">
-            <button onclick="resetThresholds()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
-              恢復預設
-            </button>
-            <button onclick="applyThresholds()" class="px-3 py-1 text-xs font-semibold rounded bg-sky-600 hover:bg-sky-500 text-white cursor-pointer">
-              套用參數
-            </button>
-          </div>
-        </div>
-        <div id="threshold-inputs" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-          <!-- 動態產生 7 個時框的輸入框 -->
         </div>
       </div>
     </header>
 
-    <!-- 7 週期多空力道矩陣（核心看板） -->
+    <!-- 5 週期多空力道矩陣（核心看板） -->
     <main class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
       <div class="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900">
         <div class="flex items-center gap-2">
-          <h2 class="text-sm sm:text-base font-bold text-slate-100">7 週期多空力道矩陣</h2>
-          <span class="text-xs text-slate-400">（前波位置 = (現價 - 前波底) / (前波高 - 前波底)）</span>
+          <h2 class="text-sm sm:text-base font-bold text-slate-100">多週期多空力道矩陣（15分 / 30分 / 時 / 日 / 週）</h2>
         </div>
         <div class="flex items-center gap-3 text-xs text-slate-400">
           <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span> 陰（連黑 &ge; 2）</span>
@@ -135,7 +119,7 @@
       <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 text-xs font-semibold text-slate-400 bg-slate-950/60 border-b border-slate-800/80">
         <div class="col-span-2">週期 / 最新收盤</div>
         <div class="col-span-1 text-center">狀態</div>
-        <div class="col-span-3">前波比例 &amp; ZigZag 高低點</div>
+        <div class="col-span-3">縮小 K 線走勢 &amp; 建議訊號</div>
         <div class="col-span-6 text-center">多空力道視覺化（左：連黑陰 / 中：0軸 / 右：連紅陽）</div>
       </div>
 
@@ -201,6 +185,28 @@
         btnTxf.className = activeCls;
         btnTwii.className = inactiveCls;
         hoursNote.textContent = '台指期交易時段：日盤 08:45 ~ 13:45 ｜ 夜盤 15:00 ~ 05:00（非盤中自動切換快取狀態）';
+      }
+    }
+
+    async function queryStockCode() {
+      const code = document.getElementById('stock-code-input').value.trim();
+      if (!code) return;
+      localStorage.setItem('txff_active_target', 'STOCK');
+      localStorage.setItem('txff_stock_code', code);
+      try {
+        const res = await fetch('/api/target', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'STOCK', stock_code: code }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderDashboard(data);
+          countdownRemainingMs = refreshIntervalMs;
+          lastTickTime = Date.now();
+        }
+      } catch (err) {
+        console.error('查詢個股失敗:', err);
       }
     }
 
@@ -374,13 +380,7 @@
       document.getElementById('last-fetched').textContent = quote.last_fetched_at || '--';
       document.getElementById('data-source').textContent = quote.source || '--';
 
-      // 2. 渲染 ZigZag 參數設定面板（僅在尚未建立或未聚焦編輯時更新）
-      if (thresholds_pct) {
-        currentThresholdsPct = thresholds_pct;
-        renderThresholdInputs(timeframes, thresholds_pct);
-      }
-
-      // 3. 渲染 7 週期多空力道矩陣
+      // 2. 渲染 5 週期多空力道矩陣
       const container = document.getElementById('matrix-rows');
       container.innerHTML = timeframes.map(renderTimeframeRow).join('');
     }
@@ -398,12 +398,35 @@
         '烏雲罩日': '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="5" y="5" width="6" height="12" rx="1" fill="#f43f5e"/><line x1="2" y1="11" x2="26" y2="11" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/><rect x="16" y="2" width="7" height="12" rx="1" fill="#10b981"/></svg>',
         '空頭島型反轉': '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="2" y="12" width="5" height="6" rx="1" fill="#f43f5e"/><rect x="11.5" y="2" width="5" height="5" rx="1" fill="#fbbf24"/><rect x="21" y="11" width="5" height="7" rx="1" fill="#10b981"/><line x1="1" y1="9.5" x2="27" y2="9.5" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2"/></svg>',
         '假突破翻黑': '<svg width="32" height="22" viewBox="0 0 28 20"><line x1="2" y1="8" x2="26" y2="8" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="2,2"/><path d="M3,12 Q10,1 16,7 T25,16" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><polyline points="21,16 25,16 25,12" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        '連2陽K': '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="6" y="9" width="6" height="8" rx="1" fill="#f43f5e"/><rect x="16" y="4" width="6" height="10" rx="1" fill="#f43f5e"/></svg>',
+        '連2陰K': '<svg width="32" height="22" viewBox="0 0 28 20"><rect x="6" y="4" width="6" height="8" rx="1" fill="#10b981"/><rect x="16" y="7" width="6" height="10" rx="1" fill="#10b981"/></svg>',
       };
       return svgs[pattern] || '';
     }
 
+    function renderMiniKlineSvg(miniCandles) {
+      if (!miniCandles || miniCandles.length === 0) return '<div class="text-xs text-slate-500">無 K 線資料</div>';
+      const w = 200, h = 44, padY = 4;
+      const hi = Math.max(...miniCandles.map(c => c.h));
+      const lo = Math.min(...miniCandles.map(c => c.l));
+      const span = Math.max(hi - lo, 0.01);
+      const yOf = p => padY + ((hi - p) / span) * (h - 2 * padY);
+      const step = w / miniCandles.length;
+      const barW = Math.max(3, Math.min(8, step * 0.65));
+      const elems = miniCandles.map((c, i) => {
+        const cx = i * step + step / 2;
+        const yo = yOf(c.o), yh = yOf(c.h), yl = yOf(c.l), yc = yOf(c.c);
+        const col = c.c > c.o ? '#f43f5e' : (c.c < c.o ? '#10b981' : '#94a3b8');
+        const op = c.forming ? '0.55' : '1';
+        const top = Math.min(yo, yc);
+        const bh = Math.max(Math.abs(yc - yo), 1.5);
+        return `<line x1="${cx.toFixed(1)}" y1="${yh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yl.toFixed(1)}" stroke="${col}" stroke-width="1.2" opacity="${op}"/><rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="0.8" fill="${col}" opacity="${op}"/>`;
+      }).join('');
+      return `<svg width="100%" height="44" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 border border-slate-800 rounded max-w-[230px]">${elems}</svg>`;
+    }
+
     function renderTimeframeRow(tf) {
-      const { label, threshold_pct, latest_candle, swing_high, swing_low, is_fallback_pivot, ratio, streak, reversal } = tf;
+      const { label, latest_candle, streak, reversal, mini_candles } = tf;
 
       let reversalHtml = '';
       if (reversal && reversal.signal !== 'none') {
@@ -414,13 +437,9 @@
           ? `<span class="ml-1 opacity-80">(${reversal.bars_ago}T前)</span>`
           : '';
         if (reversal.signal === 'bull_reversal') {
-          const tjTag = reversal.is_taiji ? '☯️ 轉陽：' : '底部反轉：';
-          const tjRing = reversal.is_taiji ? ' shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70' : '';
-          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}${repBadge}${agoText}</span></div>`;
+          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>[在陽] 建議買進（${reversal.pattern}）${repBadge}${agoText}</span></div>`;
         } else if (reversal.signal === 'bear_reversal') {
-          const tjTag = reversal.is_taiji ? '☯️ 轉陰：' : '高檔反轉：';
-          const tjRing = reversal.is_taiji ? ' shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70' : '';
-          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70${tjRing}"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${tjTag}${reversal.pattern}${repBadge}${agoText}</span></div>`;
+          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>[在陰] 建議賣出（${reversal.pattern}）${repBadge}${agoText}</span></div>`;
         }
       }
 
@@ -514,9 +533,6 @@
           <div class="md:col-span-2 flex items-center justify-between md:block">
             <div class="flex items-center gap-2">
               <span class="text-base font-bold text-slate-100 w-10">${label}</span>
-              <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80 tabular-nums">
-                ZZ ${threshold_pct}%
-              </span>
             </div>
             <div class="text-[11px] text-slate-500 tabular-nums md:mt-0.5">${ohlcInfo}</div>
           </div>
@@ -527,16 +543,9 @@
             ${statusBadgeHtml}
           </div>
 
-          <!-- 3. 前波比例數值 + ZigZag 高低點 -->
-          <div class="md:col-span-3 tabular-nums" title="ZigZag 轉折閾值 ${threshold_pct}%${pivotNote}">
-            <div class="flex items-baseline justify-between md:justify-start gap-2">
-              <span class="inline-flex items-center text-sm sm:text-base font-bold ${ratioColor}"><span class="text-xs font-normal text-slate-400 mr-1">距前底:</span>${ratioText}${ratioBadge}</span>
-              <span class="text-[11px] text-slate-500">${pivotNote}</span>
-            </div>
-            <div class="text-[11px] text-slate-400 mt-0.5 flex flex-wrap gap-x-2.5">
-              <span>前高 <span class="text-rose-300/90 font-medium">${formatNumber(swing_high)}</span></span>
-              <span>前低 <span class="text-emerald-300/90 font-medium">${formatNumber(swing_low)}</span></span>
-            </div>
+          <!-- 3. 縮小 K 線走勢圖 + 買賣建議亮燈 -->
+          <div class="md:col-span-3 tabular-nums">
+            ${renderMiniKlineSvg(mini_candles)}
             ${reversalHtml}
           </div>
 

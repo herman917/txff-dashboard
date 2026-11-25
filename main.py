@@ -6,7 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,8 +45,9 @@ class IntervalUpdatePayload(BaseModel):
 
 
 class TargetUpdatePayload(BaseModel):
-    """前端傳入的監控標的：'TXFF' 或 'TWII'"""
+    """前端傳入的監控標的：'TXFF'、'TWII' 或 'STOCK' 搭配 stock_code"""
     target: str
+    stock_code: Optional[str] = None
 
 
 async def _background_poll_loop() -> None:
@@ -171,8 +172,8 @@ async def update_interval(payload: IntervalUpdatePayload):
 
 @app.post("/api/target")
 async def update_target(payload: TargetUpdatePayload):
-    """切換監控標的：'TXFF' (台指期) 或 'TWII' (台股大盤指數)"""
-    if payload.target in ("TXFF", "TWII"):
-        await market_service.set_target(payload.target)
-        logger.info(f"監控標的已切換為 {payload.target}")
+    """切換監控標的：'TXFF' (台指期)、'TWII' (台股大盤) 或 'STOCK' (台股個股代號)"""
+    if payload.target in ("TXFF", "TWII", "STOCK"):
+        await market_service.set_target(payload.target, payload.stock_code)
+        logger.info(f"監控標的已切換為 {payload.target} {payload.stock_code or ''}")
     return await _build_market_response()

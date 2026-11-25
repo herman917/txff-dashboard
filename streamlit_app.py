@@ -74,20 +74,20 @@ st.markdown(
       .tf-col-ratio { flex: 1 1 180px; min-width: 160px; }
       .tf-col-bar { flex: 2 1 280px; min-width: 240px; }
       .badge-bull {
-        display: inline-block; width: 46px; padding: 3px 0; border-radius: 6px;
-        background: #e11d48; color: #fff; font-weight: 700; font-size: 12px; text-align: center;
+        display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
+        background: #e11d48; color: #fff; font-weight: 800; font-size: 14px; text-align: center;
       }
       .badge-bear {
-        display: inline-block; width: 46px; padding: 3px 0; border-radius: 6px;
-        background: #059669; color: #fff; font-weight: 700; font-size: 12px; text-align: center;
+        display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
+        background: #059669; color: #fff; font-weight: 800; font-size: 14px; text-align: center;
       }
       .badge-flat {
-        display: inline-block; width: 46px; padding: 3px 0; border-radius: 6px;
-        background: #334155; color: #e2e8f0; font-weight: 700; font-size: 12px; text-align: center;
+        display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
+        background: #334155; color: #f8fafc; font-weight: 800; font-size: 14px; text-align: center;
       }
       .bar-track {
         position: relative;
-        height: 30px;
+        height: 34px;
         background: #020617;
         border: 1px solid #1e293b;
         border-radius: 8px;
@@ -95,21 +95,21 @@ st.markdown(
       }
       .bar-zero {
         position: absolute; top: 0; bottom: 0; left: 50%;
-        width: 2px; background: rgba(148,163,184,0.8); transform: translateX(-50%); z-index: 2;
+        width: 2px; background: rgba(203,213,225,0.85); transform: translateX(-50%); z-index: 2;
       }
       .bar-fill-bull {
         position: absolute; top: 4px; bottom: 4px; left: 50%;
         background: linear-gradient(90deg, #e11d48, #f43f5e);
         border-radius: 0 4px 4px 0;
-        display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;
-        color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap;
+        display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;
+        color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap;
       }
       .bar-fill-bear {
         position: absolute; top: 4px; bottom: 4px; right: 50%;
         background: linear-gradient(270deg, #059669, #10b981);
         border-radius: 4px 0 0 4px;
-        display: flex; align-items: center; justify-content: flex-start; padding-left: 6px;
-        color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap;
+        display: flex; align-items: center; justify-content: flex-start; padding-left: 8px;
+        color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap;
       }
       .bar-weak-bull {
         position: absolute; top: 6px; bottom: 6px; left: 50%; width: 6.25%;
@@ -126,13 +126,13 @@ st.markdown(
       }
       .rev-bull {
         display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
-        padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
-        background: rgba(225,29,72,0.22); color: #fda4af; border: 1px solid rgba(244,63,94,0.65);
+        padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;
+        background: rgba(225,29,72,0.22); color: #fecdd3; border: 1px solid rgba(244,63,94,0.65);
       }
       .rev-bear {
         display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
-        padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
-        background: rgba(5,150,105,0.22); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.65);
+        padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;
+        background: rgba(5,150,105,0.22); color: #a7f3d0; border: 1px solid rgba(16,185,129,0.65);
       }
       .rev-taiji-bull {
         background: linear-gradient(90deg, rgba(225,29,72,0.38), rgba(244,63,94,0.2));
@@ -294,21 +294,21 @@ def render_live_board(target: str, force: bool) -> None:
         <div class="quote-card tabular">
           <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px;">
             <div>
-              <span style="font-size:18px; font-weight:800; color:#f8fafc;">{quote['name']}</span>
-              <span style="margin-left:8px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; background:{status_bg}; color:{status_fg};">
+              <span style="font-size:20px; font-weight:800; color:#ffffff;">{quote['name']}</span>
+              <span style="margin-left:8px; padding:3px 10px; border-radius:999px; font-size:13px; font-weight:700; background:{status_bg}; color:{status_fg};">
                 {quote['status_text']}
               </span>
             </div>
-            <div style="font-size:12px; color:#94a3b8;">
+            <div style="font-size:13.5px; color:#cbd5e1;">
               資料：{quote['market_time'] or '--'} ｜ 更新：{quote['last_fetched_at'] or '--'} ｜ 每 {interval_sec}s
             </div>
           </div>
           <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
             <div style="display:flex; align-items:baseline; gap:14px;">
-              <span style="font-size:36px; font-weight:900; color:{price_color};">{_fmt(quote['price'])}</span>
-              <span style="font-size:18px; font-weight:700; color:{price_color};">{sign}{_fmt(chg)} ({sign}{chg_pct:.2f}%)</span>
+              <span style="font-size:42px; font-weight:900; color:{price_color};">{_fmt(quote['price'])}</span>
+              <span style="font-size:20px; font-weight:800; color:{price_color};">{sign}{_fmt(chg)} ({sign}{chg_pct:.2f}%)</span>
             </div>
-            <div style="padding:4px 10px; border-radius:8px; font-size:12px; font-weight:700; background:{res_bg}; color:{res_fg}; border:1px solid {res_bd};">
+            <div style="padding:5px 12px; border-radius:8px; font-size:14px; font-weight:700; background:{res_bg}; color:{res_fg}; border:1px solid {res_bd};">
               ☯️ 太極共振：{taiji_res['label']}
             </div>
           </div>
@@ -339,11 +339,11 @@ def render_live_board(target: str, force: bool) -> None:
         elif st_info["streak"] <= -2:
             bar_inner = f'<div class="bar-fill-bear" style="width:{w_pct}%">{st_info["streak_label"]}</div>'
         elif st_info["streak"] == 1:
-            bar_inner = '<div class="bar-weak-bull"></div><span style="position:absolute;left:57.5%;top:50%;transform:translateY(-50%);font-size:11px;color:#94a3b8;">1 紅</span>'
+            bar_inner = '<div class="bar-weak-bull"></div><span style="position:absolute;left:57.5%;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:#e2e8f0;">1 紅</span>'
         elif st_info["streak"] == -1:
-            bar_inner = '<div class="bar-weak-bear"></div><span style="position:absolute;right:57.5%;top:50%;transform:translateY(-50%);font-size:11px;color:#94a3b8;">1 黑</span>'
+            bar_inner = '<div class="bar-weak-bear"></div><span style="position:absolute;right:57.5%;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:#e2e8f0;">1 黑</span>'
         else:
-            bar_inner = '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:#64748b;">十字盤整</span>'
+            bar_inner = '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:13px;font-weight:600;color:#cbd5e1;">十字盤整</span>'
 
         rev = tf.get("reversal") or {}
         rev_html = ""
@@ -361,13 +361,13 @@ def render_live_board(target: str, force: bool) -> None:
         row_str = (
             f'<div class="tf-row tabular">'
             f'<div class="tf-col-name">'
-            f'<span style="font-size:16px;font-weight:700;color:#f1f5f9;">{tf["label"]}</span>'
-            f'<span style="margin-left:6px;font-size:11px;color:#94a3b8;background:#1e293b;padding:1px 6px;border-radius:4px;">ZZ {tf["threshold_pct"]}%</span>'
+            f'<span style="font-size:19px;font-weight:800;color:#ffffff;">{tf["label"]}</span>'
+            f'<span style="margin-left:6px;font-size:13px;font-weight:600;color:#e2e8f0;background:#1e293b;padding:2px 7px;border-radius:4px;">ZZ {tf["threshold_pct"]}%</span>'
             f'</div>'
             f'<div class="tf-col-badge">{badge}</div>'
             f'<div class="tf-col-ratio">'
-            f'<div style="font-size:15px;font-weight:700;color:{ratio_color};"><span style="font-size:12px;font-weight:500;color:#94a3b8;margin-right:4px;">距前底:</span>{ratio["display"]}</div>'
-            f'<div style="font-size:11px;color:#94a3b8;">前高 {_fmt(tf["swing_high"])} / 前低 {_fmt(tf["swing_low"])}</div>'
+            f'<div style="font-size:18px;font-weight:800;color:{ratio_color};"><span style="font-size:14px;font-weight:600;color:#cbd5e1;margin-right:5px;">距前底:</span>{ratio["display"]}</div>'
+            f'<div style="font-size:13.5px;font-weight:500;color:#cbd5e1;margin-top:2px;">前高 <span style="color:#fda4af;font-weight:700;">{_fmt(tf["swing_high"])}</span> / 前低 <span style="color:#6ee7b7;font-weight:700;">{_fmt(tf["swing_low"])}</span></div>'
             f'{rev_html}'
             f'</div>'
             f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div></div>'

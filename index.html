@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台指期 (TXFF) 即時多空力道看盤系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+      background-color: #070b14;
+      color: #e2e8f0;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* 自訂捲軸 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-rose-500/30 selection:text-rose-200">
+  <div class="max-w-6xl mx-auto px-4 py-4 sm:py-6 space-y-4">
+
+    <!-- 頂部狀態與總覽區 -->
+    <header class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-2xl">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <!-- 左側：指數名稱與即時報價 -->
+        <div class="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- 標的二選一切換器 -->
+              <div class="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800" role="group">
+                <button id="btn-target-TXFF" onclick="switchTarget('TXFF')"
+                        class="px-2.5 py-1 text-xs font-semibold rounded-md bg-sky-600 text-white transition cursor-pointer">
+                  台指期 (TXFF)
+                </button>
+                <button id="btn-target-TWII" onclick="switchTarget('TWII')"
+                        class="px-2.5 py-1 text-xs font-semibold rounded-md text-slate-400 hover:text-slate-200 transition cursor-pointer">
+                  台股大盤 (^TWII)
+                </button>
+              </div>
+              <h1 id="index-title" class="text-lg sm:text-xl font-bold text-slate-100">台指期近月 (TXFF)</h1>
+              <span id="market-status-badge" class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                <span id="market-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span id="market-status-text">連線中...</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-baseline gap-3 tabular-nums">
+            <span id="index-price" class="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100">
+              --
+            </span>
+            <div id="index-change-wrap" class="flex items-center gap-2 text-base sm:text-lg font-bold text-slate-400">
+              <span id="index-change">--</span>
+              <span id="index-change-pct" class="text-sm sm:text-base px-2 py-0.5 rounded bg-slate-800">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右側：更新時間、倒數進度條與控制鈕 -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 lg:text-right">
+          <div class="space-y-1 text-xs text-slate-400 tabular-nums">
+            <div>
+              資料時間：<span id="market-time" class="text-slate-200 font-medium">--</span>
+              <span class="mx-1.5 text-slate-600">|</span>
+              最後更新：<span id="last-fetched" class="text-slate-200 font-medium">--</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label for="interval-select" class="text-slate-400 whitespace-nowrap">更新週期</label>
+              <select id="interval-select" onchange="changeRefreshInterval(this.value)"
+                      class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-1.5 py-0.5 focus:outline-none focus:border-sky-500 cursor-pointer">
+                <option value="10">10 秒</option>
+                <option value="20" selected>20 秒</option>
+                <option value="30">30 秒</option>
+                <option value="60">1 分鐘</option>
+                <option value="300">5 分鐘</option>
+              </select>
+              <span class="text-slate-300 whitespace-nowrap w-12 text-right">(<span id="countdown-sec">20s</span>)</span>
+              <div class="w-full sm:w-28 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div id="countdown-bar" class="h-full bg-sky-500 transition-all duration-100 ease-linear" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="btn-refresh" onclick="manualRefresh()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+              立即更新
+            </button>
+            <button id="btn-toggle-settings" onclick="toggleSettings()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition cursor-pointer">
+              ZigZag 參數
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 可收合的 ZigZag 轉折閾值調整面板 -->
+      <div id="settings-panel" class="hidden mt-4 pt-4 border-t border-slate-800">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p class="text-xs text-slate-400">
+            調整各時框 ZigZag 轉折閾值（%）：數值越小對短期波動越敏感，數值越大則只捕捉主要波段高低點。
+          </p>
+          <div class="flex items-center gap-2">
+            <button onclick="resetThresholds()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+              恢復預設
+            </button>
+            <button onclick="applyThresholds()" class="px-3 py-1 text-xs font-semibold rounded bg-sky-600 hover:bg-sky-500 text-white cursor-pointer">
+              套用參數
+            </button>
+          </div>
+        </div>
+        <div id="threshold-inputs" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          <!-- 動態產生 7 個時框的輸入框 -->
+        </div>
+      </div>
+    </header>
+
+    <!-- 7 週期多空力道矩陣（核心看板） -->
+    <main class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+      <div class="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm sm:text-base font-bold text-slate-100">7 週期多空力道矩陣</h2>
+          <span class="text-xs text-slate-400">（公式：比例 = (前波高 - 現價) / (現價 - 前波低)）</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs text-slate-400">
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span> 陰（連黑 &ge; 2）</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-500 inline-block"></span> 盤整（僅 1 根）</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block"></span> 陽（連紅 &ge; 2）</span>
+        </div>
+      </div>
+
+      <!-- 表頭 (桌機版) -->
+      <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 text-xs font-semibold text-slate-400 bg-slate-950/60 border-b border-slate-800/80">
+        <div class="col-span-2">週期 / 最新收盤</div>
+        <div class="col-span-1 text-center">狀態</div>
+        <div class="col-span-3">前波比例 &amp; ZigZag 高低點</div>
+        <div class="col-span-6 text-center">多空力道視覺化（左：連黑陰 / 中：0軸 / 右：連紅陽）</div>
+      </div>
+
+      <!-- 7 列矩陣內容 -->
+      <div id="matrix-rows" class="divide-y divide-slate-800/80">
+        <div class="p-8 text-center text-sm text-slate-500">正在載入 7 週期 K 線與量化指標...</div>
+      </div>
+    </main>
+
+    <!-- 底部說明 -->
+    <footer class="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 px-1">
+      <div>
+        資料來源：<span id="data-source">--</span> ｜ 十字線（收=開）自動延續前一根 K 線顏色狀態
+      </div>
+      <div id="market-hours-note">
+        台指期交易時段：日盤 08:45 ~ 13:45 ｜ 夜盤 15:00 ~ 05:00（非盤中自動切換快取狀態）
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const ALLOWED_INTERVALS = [10, 20, 30, 60, 300];
+    const ALLOWED_TARGETS = ['TXFF', 'TWII'];
+    let refreshIntervalMs = 20000;
+    const MAX_STREAK_BARS = 8; // 雙向進度條滿格上限（8 根）
+    let countdownRemainingMs = refreshIntervalMs;
+    let lastTickTime = Date.now();
+    let isFetching = false;
+    let currentThresholdsPct = {};
+
+    // 初始化：讀取儲存的標的與更新週期、抓一次資料並啟動輪詢與平滑進度條
+    document.addEventListener('DOMContentLoaded', async () => {
+      const savedSec = parseInt(localStorage.getItem('txff_refresh_interval_sec'), 10);
+      if (ALLOWED_INTERVALS.includes(savedSec)) {
+        refreshIntervalMs = savedSec * 1000;
+        countdownRemainingMs = refreshIntervalMs;
+        document.getElementById('interval-select').value = String(savedSec);
+        syncIntervalToBackend(savedSec);
+      }
+
+      const savedTarget = localStorage.getItem('txff_active_target');
+      if (ALLOWED_TARGETS.includes(savedTarget) && savedTarget !== 'TXFF') {
+        await switchTarget(savedTarget);
+      } else {
+        fetchMarketData();
+      }
+      setInterval(updateCountdownLoop, 100);
+    });
+
+    function updateTargetButtonsUI(target) {
+      const btnTxf = document.getElementById('btn-target-TXFF');
+      const btnTwii = document.getElementById('btn-target-TWII');
+      const hoursNote = document.getElementById('market-hours-note');
+
+      const activeCls = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-sky-600 text-white transition cursor-pointer';
+      const inactiveCls = 'px-2.5 py-1 text-xs font-semibold rounded-md text-slate-400 hover:text-slate-200 transition cursor-pointer';
+
+      if (target === 'TWII') {
+        btnTxf.className = inactiveCls;
+        btnTwii.className = activeCls;
+        hoursNote.textContent = '台股大盤交易時段：週一至週五 09:00 ~ 13:30（非盤中自動切換快取狀態）';
+      } else {
+        btnTxf.className = activeCls;
+        btnTwii.className = inactiveCls;
+        hoursNote.textContent = '台指期交易時段：日盤 08:45 ~ 13:45 ｜ 夜盤 15:00 ~ 05:00（非盤中自動切換快取狀態）';
+      }
+    }
+
+    async function switchTarget(target) {
+      if (!ALLOWED_TARGETS.includes(target)) return;
+      localStorage.setItem('txff_active_target', target);
+      updateTargetButtonsUI(target);
+      try {
+        const res = await fetch('/api/target', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderDashboard(data);
+          countdownRemainingMs = refreshIntervalMs;
+          lastTickTime = Date.now();
+        }
+      } catch (err) {
+        console.error('切換標的失敗:', err);
+      }
+    }
+
+    function formatCountdown(sec) {
+      if (sec >= 60) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return s === 0 ? `${m}m` : `${m}m${String(s).padStart(2, '0')}s`;
+      }
+      return `${sec}s`;
+    }
+
+    async function syncIntervalToBackend(sec) {
+      try {
+        await fetch('/api/interval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interval_sec: sec }),
+        });
+      } catch (err) {
+        console.error('同步更新週期失敗:', err);
+      }
+    }
+
+    function changeRefreshInterval(val) {
+      const sec = parseInt(val, 10);
+      if (!ALLOWED_INTERVALS.includes(sec)) return;
+      localStorage.setItem('txff_refresh_interval_sec', String(sec));
+      refreshIntervalMs = sec * 1000;
+      countdownRemainingMs = refreshIntervalMs;
+      lastTickTime = Date.now();
+      syncIntervalToBackend(sec);
+    }
+
+    function updateCountdownLoop() {
+      const now = Date.now();
+      const delta = now - lastTickTime;
+      lastTickTime = now;
+      countdownRemainingMs -= delta;
+
+      if (countdownRemainingMs <= 0) {
+        countdownRemainingMs = refreshIntervalMs;
+        fetchMarketData();
+      }
+
+      const pct = Math.max(0, Math.min(100, (countdownRemainingMs / refreshIntervalMs) * 100));
+      document.getElementById('countdown-bar').style.width = `${pct}%`;
+      document.getElementById('countdown-sec').textContent = formatCountdown(Math.ceil(countdownRemainingMs / 1000));
+    }
+
+    async function fetchMarketData() {
+      if (isFetching) return;
+      isFetching = true;
+      try {
+        const res = await fetch('/api/market');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderDashboard(data);
+      } catch (err) {
+        console.error('抓取市場資料失敗:', err);
+        setStatusBadge(false, true, '連線異常（保留快取）');
+      } finally {
+        isFetching = false;
+      }
+    }
+
+    async function manualRefresh() {
+      const btn = document.getElementById('btn-refresh');
+      btn.disabled = true;
+      btn.textContent = '更新中...';
+      try {
+        const res = await fetch('/api/refresh', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          renderDashboard(data);
+          countdownRemainingMs = refreshIntervalMs;
+        }
+      } catch (err) {
+        console.error('手動更新失敗:', err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '立即更新';
+      }
+    }
+
+    function setStatusBadge(isMarketOpen, isCached, text) {
+      const badge = document.getElementById('market-status-badge');
+      const dot = document.getElementById('market-status-dot');
+      const label = document.getElementById('market-status-text');
+      label.textContent = text;
+
+      if (isMarketOpen && !isCached) {
+        badge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+      } else {
+        badge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+      }
+    }
+
+    function formatNumber(num) {
+      if (num === null || num === undefined || isNaN(num)) return '--';
+      return Number(num).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function renderDashboard(data) {
+      const { active_target, quote, timeframes, thresholds_pct } = data;
+
+      if (active_target) {
+        updateTargetButtonsUI(active_target);
+      }
+
+      // 1. 頂部總覽區
+      if (quote.name) {
+        document.getElementById('index-title').textContent = quote.name;
+      }
+      const priceEl = document.getElementById('index-price');
+      const changeEl = document.getElementById('index-change');
+      const changePctEl = document.getElementById('index-change-pct');
+      const changeWrap = document.getElementById('index-change-wrap');
+
+      priceEl.textContent = formatNumber(quote.price);
+
+      const chg = quote.change || 0;
+      const chgPct = quote.change_pct || 0;
+      const sign = chg > 0 ? '+' : '';
+
+      changeEl.textContent = `${sign}${formatNumber(chg)}`;
+      changePctEl.textContent = `${sign}${chgPct.toFixed(2)}%`;
+
+      if (chg > 0) {
+        priceEl.className = 'text-3xl sm:text-4xl font-extrabold tracking-tight text-rose-400';
+        changeWrap.className = 'flex items-center gap-2 text-base sm:text-lg font-bold text-rose-400';
+        changePctEl.className = 'text-sm sm:text-base px-2 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300';
+      } else if (chg < 0) {
+        priceEl.className = 'text-3xl sm:text-4xl font-extrabold tracking-tight text-emerald-400';
+        changeWrap.className = 'flex items-center gap-2 text-base sm:text-lg font-bold text-emerald-400';
+        changePctEl.className = 'text-sm sm:text-base px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
+      } else {
+        priceEl.className = 'text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-100';
+        changeWrap.className = 'flex items-center gap-2 text-base sm:text-lg font-bold text-slate-400';
+        changePctEl.className = 'text-sm sm:text-base px-2 py-0.5 rounded bg-slate-800 text-slate-300';
+      }
+
+      setStatusBadge(quote.is_market_open, quote.is_cached, quote.status_text);
+      document.getElementById('market-time').textContent = quote.market_time || '--';
+      document.getElementById('last-fetched').textContent = quote.last_fetched_at || '--';
+      document.getElementById('data-source').textContent = quote.source || '--';
+
+      // 2. 渲染 ZigZag 參數設定面板（僅在尚未建立或未聚焦編輯時更新）
+      if (thresholds_pct) {
+        currentThresholdsPct = thresholds_pct;
+        renderThresholdInputs(timeframes, thresholds_pct);
+      }
+
+      // 3. 渲染 7 週期多空力道矩陣
+      const container = document.getElementById('matrix-rows');
+      container.innerHTML = timeframes.map(renderTimeframeRow).join('');
+    }
+
+    function renderTimeframeRow(tf) {
+      const { label, threshold_pct, latest_candle, swing_high, swing_low, is_fallback_pivot, ratio, streak } = tf;
+
+      // 狀態標籤樣式
+      let statusBadgeHtml = '';
+      if (streak.status === '陽') {
+        statusBadgeHtml = `<span class="inline-flex items-center justify-center w-12 py-1 rounded-md text-xs font-bold bg-rose-600 text-white shadow-sm shadow-rose-900/50">陽</span>`;
+      } else if (streak.status === '陰') {
+        statusBadgeHtml = `<span class="inline-flex items-center justify-center w-12 py-1 rounded-md text-xs font-bold bg-emerald-600 text-white shadow-sm shadow-emerald-900/50">陰</span>`;
+      } else {
+        statusBadgeHtml = `<span class="inline-flex items-center justify-center w-12 py-1 rounded-md text-xs font-bold bg-slate-700 text-slate-200 border border-slate-600">盤整</span>`;
+      }
+
+      // 比例顏色
+      let ratioColor = 'text-slate-100';
+      if (ratio.state === 'breakout') ratioColor = 'text-rose-400';
+      else if (ratio.state === 'breakdown') ratioColor = 'text-emerald-400';
+
+      // 雙向進度條計算（以 50% 為中心 0 軸，單側最大 50%）
+      let barHtml = '';
+      const absCount = streak.abs_streak || 0;
+      const clampedCount = Math.min(absCount, MAX_STREAK_BARS);
+      const widthPct = (clampedCount / MAX_STREAK_BARS) * 50; // 最大 50%
+
+      if (streak.streak >= 2) {
+        // 連續紅 K（陽）：從中心向右延伸紅色長條
+        barHtml = `
+          <div class="absolute top-1 bottom-1 left-1/2 rounded-r bg-gradient-to-r from-rose-600 to-rose-500 flex items-center justify-end pr-2 transition-all duration-300 shadow-sm shadow-rose-900/40"
+               style="width: ${widthPct}%">
+            <span class="text-[11px] font-bold text-white whitespace-nowrap drop-shadow">${streak.streak_label}</span>
+          </div>
+        `;
+      } else if (streak.streak <= -2) {
+        // 連續黑 K（陰）：從中心向左延伸綠色長條
+        barHtml = `
+          <div class="absolute top-1 bottom-1 rounded-l bg-gradient-to-l from-emerald-600 to-emerald-500 flex items-center justify-start pl-2 transition-all duration-300 shadow-sm shadow-emerald-900/40"
+               style="right: 50%; width: ${widthPct}%">
+            <span class="text-[11px] font-bold text-white whitespace-nowrap drop-shadow">${streak.streak_label}</span>
+          </div>
+        `;
+      } else if (streak.streak === 1) {
+        // 僅 1 根紅 K：微弱半格灰色/淡紅指示
+        barHtml = `
+          <div class="absolute top-1.5 bottom-1.5 left-1/2 rounded-r bg-slate-600/80 border-r-2 border-rose-400/70 flex items-center pl-1.5 transition-all duration-300"
+               style="width: 6.25%">
+          </div>
+          <span class="absolute top-1/2 -translate-y-1/2 left-[57.5%] text-[11px] font-medium text-slate-400 whitespace-nowrap">1 紅（觀望）</span>
+        `;
+      } else if (streak.streak === -1) {
+        // 僅 1 根黑 K：微弱半格灰色/淡綠指示
+        barHtml = `
+          <div class="absolute top-1.5 bottom-1.5 rounded-l bg-slate-600/80 border-l-2 border-emerald-400/70 transition-all duration-300"
+               style="right: 50%; width: 6.25%">
+          </div>
+          <span class="absolute top-1/2 -translate-y-1/2 right-[57.5%] text-[11px] font-medium text-slate-400 whitespace-nowrap">1 黑（觀望）</span>
+        `;
+      } else {
+        barHtml = `
+          <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] text-slate-500">十字盤整</span>
+        `;
+      }
+
+      const ohlcInfo = latest_candle
+        ? `開 ${formatNumber(latest_candle.open)} / 收 ${formatNumber(latest_candle.close)}`
+        : '無 K 線資料';
+
+      const pivotNote = is_fallback_pivot ? ' (區間極值)' : '';
+
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center px-4 py-3 hover:bg-slate-800/35 transition">
+          <!-- 1. 週期名稱 -->
+          <div class="md:col-span-2 flex items-center justify-between md:block">
+            <div class="flex items-center gap-2">
+              <span class="text-base font-bold text-slate-100 w-10">${label}</span>
+              <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80 tabular-nums">
+                ZZ ${threshold_pct}%
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-500 tabular-nums md:mt-0.5">${ohlcInfo}</div>
+          </div>
+
+          <!-- 2. 目前狀態標籤 -->
+          <div class="md:col-span-1 flex md:justify-center items-center justify-between">
+            <span class="md:hidden text-xs text-slate-400">多空狀態</span>
+            ${statusBadgeHtml}
+          </div>
+
+          <!-- 3. 前波比例數值 + ZigZag 高低點 -->
+          <div class="md:col-span-3 tabular-nums" title="ZigZag 轉折閾值 ${threshold_pct}%${pivotNote}">
+            <div class="flex items-baseline justify-between md:justify-start gap-2">
+              <span class="text-sm sm:text-base font-bold ${ratioColor}">${ratio.display}</span>
+              <span class="text-[11px] text-slate-500">${pivotNote}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5 flex flex-wrap gap-x-2.5">
+              <span>前高 <span class="text-rose-300/90 font-medium">${formatNumber(swing_high)}</span></span>
+              <span>前低 <span class="text-emerald-300/90 font-medium">${formatNumber(swing_low)}</span></span>
+            </div>
+          </div>
+
+          <!-- 4. 多空力道視覺化長條（雙向進度條） -->
+          <div class="md:col-span-6">
+            <div class="relative h-8 bg-slate-950/90 border border-slate-800 rounded-lg overflow-hidden">
+              <!-- 背景輔助格線（左右各 4 格參考） -->
+              <div class="absolute inset-0 grid grid-cols-8 pointer-events-none">
+                <div class="border-r border-slate-800/40"></div>
+                <div class="border-r border-slate-800/40"></div>
+                <div class="border-r border-slate-800/40"></div>
+                <div class="border-r border-slate-500/70"></div>
+                <div class="border-r border-slate-800/40"></div>
+                <div class="border-r border-slate-800/40"></div>
+                <div class="border-r border-slate-800/40"></div>
+                <div></div>
+              </div>
+              <!-- 中心 0 軸標籤 -->
+              <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-slate-400/80 z-10 pointer-events-none"></div>
+              ${barHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settings-panel');
+      panel.classList.toggle('hidden');
+    }
+
+    function renderThresholdInputs(timeframes, thresholdsPct) {
+      const container = document.getElementById('threshold-inputs');
+      // 若使用者正在輸入中，不覆蓋現有 input
+      if (container.children.length > 0 && container.contains(document.activeElement)) {
+        return;
+      }
+      container.innerHTML = timeframes.map(tf => {
+        const val = thresholdsPct[tf.timeframe] ?? tf.threshold_pct;
+        return `
+          <label class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
+            <span class="font-semibold text-slate-300">${tf.label}</span>
+            <div class="flex items-center gap-1">
+              <input type="number" step="0.1" min="0.05" max="30"
+                     data-tf="${tf.timeframe}" value="${val}"
+                     class="zz-input w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right text-slate-100 tabular-nums focus:outline-none focus:border-sky-500" />
+              <span class="text-slate-500">%</span>
+            </div>
+          </label>
+        `;
+      }).join('');
+    }
+
+    async function applyThresholds() {
+      const inputs = document.querySelectorAll('.zz-input');
+      const payload = {};
+      inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val) && val > 0) {
+          payload[inp.dataset.tf] = val;
+        }
+      });
+
+      const res = await fetch('/api/thresholds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thresholds: payload }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        renderDashboard(data);
+      }
+    }
+
+    async function resetThresholds() {
+      const res = await fetch('/api/thresholds/reset', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        // 清空容器強制重新渲染預設值
+        document.getElementById('threshold-inputs').innerHTML = '';
+        renderDashboard(data);
+      }
+    }
+  </script>
+</body>
+</html>

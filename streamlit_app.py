@@ -394,6 +394,32 @@ def render_live_board(target: str, force: bool) -> None:
             tj_tag = "☯️ 轉陰：" if rev.get("is_taiji") else "高檔反轉："
             rev_html = f'<div class="rev-bear{tj_cls}"><span class="dot-green"></span>{svg_icon}<span>{tj_tag}{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
 
+        # 最近最多 7 根已收線紅黑方塊 + 進行中(未收線) K 線紅黑狀況
+        recent_colors = tf.get("recent_colors") or []
+        forming_color = tf.get("forming_color")
+        color_hex = {"red": "#f43f5e", "green": "#10b981", "doji": "#94a3b8"}
+        color_zh = {"red": "紅", "green": "黑", "doji": "十"}
+        blocks_html = "".join(
+            f'<span title="{color_zh.get(col, "")}" style="display:inline-block;width:16px;height:14px;border-radius:3px;background:{color_hex.get(col, "#64748b")};"></span>'
+            for col in recent_colors
+        )
+        forming_html = ""
+        if forming_color:
+            fc_hex = color_hex.get(forming_color, "#94a3b8")
+            fc_zh = color_zh.get(forming_color, "")
+            forming_html = (
+                f'<span style="color:#64748b;margin:0 4px;">|</span>'
+                f'<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:{fc_hex};">'
+                f'<span style="display:inline-block;width:16px;height:14px;border-radius:3px;border:2px dashed {fc_hex};background:rgba(255,255,255,0.06);"></span>'
+                f'即時({fc_zh})</span>'
+            )
+        strip_html = (
+            f'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px;">'
+            f'<span style="font-size:12px;color:#cbd5e1;margin-right:4px;">近{len(recent_colors)}T:</span>'
+            f'{blocks_html}{forming_html}'
+            f'</div>'
+        )
+
         row_str = (
             f'<div class="tf-row tabular">'
             f'<div class="tf-col-name">'
@@ -406,7 +432,7 @@ def render_live_board(target: str, force: bool) -> None:
             f'<div style="font-size:13.5px;font-weight:500;color:#cbd5e1;margin-top:2px;">前高 <span style="color:#fda4af;font-weight:700;">{_fmt(tf["swing_high"])}</span> / 前低 <span style="color:#6ee7b7;font-weight:700;">{_fmt(tf["swing_low"])}</span></div>'
             f'{rev_html}'
             f'</div>'
-            f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div></div>'
+            f'<div class="tf-col-bar"><div class="bar-track"><div class="bar-zero"></div>{bar_inner}</div>{strip_html}</div>'
             f'</div>'
         )
         rows_html.append(row_str)

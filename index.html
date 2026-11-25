@@ -496,6 +496,18 @@
 
       const pivotNote = is_fallback_pivot ? ' (區間極值)' : '';
 
+      const recentColors = tf.recent_colors || [];
+      const formingColor = tf.forming_color;
+      const colorMap = { red: '#f43f5e', green: '#10b981', doji: '#94a3b8' };
+      const zhMap = { red: '紅', green: '黑', doji: '十' };
+      const blocksHtml = recentColors.map(c =>
+        `<span title="${zhMap[c] || ''}" class="inline-block w-4 h-3.5 rounded-sm" style="background:${colorMap[c] || '#64748b'}"></span>`
+      ).join('');
+      const formingHtml = formingColor
+        ? `<span class="text-slate-600 mx-1">|</span><span class="inline-flex items-center gap-1 text-[11px] font-bold" style="color:${colorMap[formingColor]}"><span class="inline-block w-4 h-3.5 rounded-sm border-2 border-dashed" style="border-color:${colorMap[formingColor]}"></span>即時(${zhMap[formingColor]})</span>`
+        : '';
+      const stripHtml = `<div class="flex items-center flex-wrap gap-1 mt-1.5"><span class="text-[11px] text-slate-400 mr-1">近${recentColors.length}T:</span>${blocksHtml}${formingHtml}</div>`;
+
       return `
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center px-4 py-3 hover:bg-slate-800/35 transition">
           <!-- 1. 週期名稱 -->
@@ -546,6 +558,7 @@
               <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-slate-400/80 z-10 pointer-events-none"></div>
               ${barHtml}
             </div>
+            ${stripHtml}
           </div>
         </div>
       `;

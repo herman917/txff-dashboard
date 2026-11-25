@@ -546,6 +546,16 @@ def evaluate_all_timeframes(
 
         latest_candle = confirmed_candles[-1] if confirmed_candles else (candles[-1] if candles else None)
 
+        def _candle_color(c: Dict[str, Any]) -> str:
+            if c["close"] > c["open"]:
+                return "red"
+            if c["close"] < c["open"]:
+                return "green"
+            return "doji"
+
+        recent_colors = [_candle_color(c) for c in confirmed_candles[-7:]]
+        forming_color = _candle_color(candles[-1]) if (candles and len(confirmed_candles) < len(candles)) else None
+
         results.append({
             "timeframe": tf_key,
             "label": tf_label,
@@ -558,6 +568,8 @@ def evaluate_all_timeframes(
             "ratio": ratio_info,
             "streak": streak_info,
             "reversal": reversal_info,
+            "recent_colors": recent_colors,
+            "forming_color": forming_color,
         })
 
     return results

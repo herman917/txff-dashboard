@@ -26,7 +26,21 @@ st.markdown(
     <style>
       .stApp {
         background-color: #070b14;
-        color: #e2e8f0;
+        color: #f8fafc;
+      }
+      /* 強制所有原生元件文字在手機深色背景上保持高對比亮色 */
+      .stRadio label, .stRadio p, .stRadio span,
+      .stSelectbox label, .stSelectbox p,
+      .stExpander summary, .stExpander summary p, .stExpander label,
+      .stButton button, .stCaption, .stCaption p {
+        color: #f8fafc !important;
+      }
+      .stButton button {
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+      }
+      .stButton button:hover {
+        background-color: #334155 !important;
       }
       .block-container {
         padding-top: 3.2rem;

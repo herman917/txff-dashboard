@@ -297,7 +297,7 @@ def render_live_board(target: str, force: bool) -> None:
         rows_html.append(row_str)
 
     st.markdown(f'<div class="matrix-card">{"".join(rows_html)}</div>', unsafe_allow_html=True)
-    st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 比例 = (前波高 - 現價) / (現價 - 前波低)")
+    st.caption(f"資料來源：{quote['source']} ｜ 十字線延續前一根 K 線顏色 ｜ 前波位置 = (現價 - 前波底) / (前波高 - 前波底)")
 
 
 render_live_board(target_choice, force_clicked)

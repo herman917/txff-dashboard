@@ -143,12 +143,13 @@ def calculate_price_ratio(
     swing_low: Optional[float],
 ) -> Dict[str, Any]:
     """
-    計算高低點比例位置：
-        比例 = (前波高點 - 現在點位) / (現在點位 - 前波低點)
+    計算目前點位在最近前波區間的位置比例：
+        位置 = (目前點位 - 前波底) / (前波高 - 前波底)
 
-    邊界處理：
-    - 分母 <= 0 (現在點位 <= 前波低點)：顯示「破底 (∞)」
-    - 分子 < 0 (現在點位 > 前波高點)：顯示「創高 (負值)」，保留小數點後兩位
+    結果以百分比呈現：
+    - 0% ~ 100%：位於前波底～前波高區間內（例如 50.0% 代表中軸）
+    - > 100%：突破前波高，顯示「XXX.X% (創高)」
+    - < 0%：跌破前波底，顯示「-XX.X% (破底)」
     """
     if swing_high is None or swing_low is None or current_price <= 0:
         return {
@@ -157,27 +158,34 @@ def calculate_price_ratio(
             "state": "unknown",
         }
 
-    numerator = swing_high - current_price
-    denominator = current_price - swing_low
-
-    if denominator <= 0:
+    span = swing_high - swing_low
+    if span <= 0:
         return {
             "value": None,
-            "display": "破底 (∞)",
-            "state": "breakdown",
+            "display": "--",
+            "state": "unknown",
         }
 
-    ratio = numerator / denominator
-    if numerator < 0:
+    pos = (current_price - swing_low) / span
+    pct = pos * 100.0
+
+    if pos > 1.0:
         return {
-            "value": round(ratio, 2),
-            "display": f"創高 ({ratio:.2f})",
+            "value": round(pos, 4),
+            "display": f"{pct:.1f}% (創高)",
             "state": "breakout",
         }
 
+    if pos < 0.0:
+        return {
+            "value": round(pos, 4),
+            "display": f"{pct:.1f}% (破底)",
+            "state": "breakdown",
+        }
+
     return {
-        "value": round(ratio, 2),
-        "display": f"{ratio:.2f}",
+        "value": round(pos, 4),
+        "display": f"{pct:.1f}%",
         "state": "normal",
     }
 

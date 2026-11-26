@@ -473,12 +473,12 @@ def _detect_confirmed_reversal_at_tip(candles: List[Dict[str, Any]]) -> Dict[str
         if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
             return prev_sig
 
-    # 亦支援在當根剛完成 連2陽K / 連2陰K / 多頭吞噬 / 空頭吞噬 / 貫穿 / 烏雲罩日（本身第2根已收紅收漲或收黑收跌）
+    # 只有「連2陽K / 連2陰K」本身就是第2根收紅/收黑；其餘單根或兩根型態皆須等「下一根」收紅收漲/收黑收跌才算確認
     curr_sig = _detect_reversal_at_tip(candles, {"value": None}, 1.0, 0.0)
-    if curr_sig["signal"] == "bull_reversal" and curr_sig["pattern"] in ("連2陽K", "多頭吞噬", "多頭貫穿", "多頭島型反轉"):
+    if curr_sig["signal"] == "bull_reversal" and curr_sig["pattern"] == "連2陽K":
         if c_curr["close"] > c_curr["open"] and c_curr["close"] > c_prev["close"]:
             return curr_sig
-    elif curr_sig["signal"] == "bear_reversal" and curr_sig["pattern"] in ("連2陰K", "空頭吞噬", "烏雲罩日", "空頭島型反轉"):
+    elif curr_sig["signal"] == "bear_reversal" and curr_sig["pattern"] == "連2陰K":
         if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
             return curr_sig
 

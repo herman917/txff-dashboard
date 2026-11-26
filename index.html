@@ -421,7 +421,7 @@
         const bh = Math.max(Math.abs(yc - yo), 2);
         return `<line x1="${cx.toFixed(1)}" y1="${yh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yl.toFixed(1)}" stroke="${col}" stroke-width="1.3" opacity="${op}"/><rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="0.8" fill="${col}" opacity="${op}"/>`;
       }).join('');
-      return `<svg width="100%" height="88" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 border border-slate-800 rounded-lg max-w-[320px]">${elems}</svg>`;
+      return `<svg width="100%" height="88" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 border border-slate-800 rounded-lg w-full">${elems}</svg>`;
     }
 
     function renderTimeframeRow(tf) {
@@ -429,16 +429,10 @@
 
       let reversalHtml = '';
       if (reversal && reversal.signal !== 'none') {
-        const repBadge = (reversal.repeat_count || 1) > 1
-          ? `<span class="ml-1 px-1.5 rounded bg-white/20 text-white font-black">×${reversal.repeat_count}</span>`
-          : '';
-        const agoText = (reversal.bars_ago || 0) > 0
-          ? `<span class="ml-1 opacity-80">(${reversal.bars_ago}T前)</span>`
-          : '';
         if (reversal.signal === 'bull_reversal') {
-          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}${repBadge}${agoText}</span></div>`;
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}</span></div>`;
         } else if (reversal.signal === 'bear_reversal') {
-          reversalHtml = `<div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}${repBadge}${agoText}</span></div>`;
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}</span></div>`;
         }
       }
 
@@ -527,23 +521,16 @@
       const stripHtml = `<div class="flex items-center flex-wrap gap-1 mt-1.5"><span class="text-[11px] text-slate-400 mr-1">近${recentColors.length}T:</span>${blocksHtml}${formingHtml}</div>`;
 
       return `
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center px-4 py-3 hover:bg-slate-800/35 transition">
-          <!-- 1. 週期名稱 -->
-          <div class="md:col-span-3 flex items-center justify-between md:block">
-            <div class="flex items-center gap-2">
-              <span class="text-base font-bold text-slate-100 w-10">${label}</span>
-            </div>
-            <div class="text-[11px] text-slate-500 tabular-nums md:mt-0.5">${ohlcInfo}</div>
-          </div>
-
-          <!-- 2. 目前狀態標籤 + 反轉亮燈 -->
-          <div class="md:col-span-2 flex flex-col md:items-center items-start gap-1.5">
+        <div class="flex flex-col gap-2.5 px-4 py-3 hover:bg-slate-800/35 transition">
+          <!-- 上方：週期 + 陰陽狀態 + 反轉亮燈 -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span class="text-base font-bold text-slate-100 w-10">${label}</span>
             ${statusBadgeHtml}
             ${reversalHtml}
+            <span class="ml-auto text-[11px] text-slate-500 tabular-nums">${ohlcInfo}</span>
           </div>
-
-          <!-- 3. 縮小 K 線走勢圖 -->
-          <div class="md:col-span-7 tabular-nums">
+          <!-- 下方：縮小 K 線走勢圖 -->
+          <div class="w-full tabular-nums">
             ${renderMiniKlineSvg(mini_candles)}
           </div>
         </div>

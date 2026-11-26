@@ -66,16 +66,21 @@ st.markdown(
       }
       .tf-row {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        flex-direction: column;
         gap: 10px;
         padding: 12px 16px;
         border-bottom: 1px solid #1e293b;
       }
       .tf-row:last-child { border-bottom: none; }
-      .tf-col-name { flex: 0 0 60px; }
-      .tf-col-badge { flex: 0 0 auto; min-width: 68px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-      .tf-col-ratio { flex: 1 1 220px; min-width: 190px; }
+      .tf-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .tf-chart-wrap {
+        width: 100%;
+      }
       .badge-bull {
         display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
         background: #e11d48; color: #fff; font-weight: 800; font-size: 14px; text-align: center;
@@ -287,7 +292,7 @@ def _mini_kline_svg(mini_candles: list) -> str:
 
     return (
         f'<svg width="100%" height="96" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
-        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;max-width:340px;">'
+        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;">'
         f'{"".join(elems)}</svg>'
     )
 
@@ -376,27 +381,22 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
 
         rev = tf.get("reversal") or {}
         rev_html = ""
-        rep_n = rev.get("repeat_count", 1)
-        bars_ago = rev.get("bars_ago", 0)
-        rep_badge = f'<span style="margin-left:4px;padding:0 5px;border-radius:4px;background:rgba(255,255,255,0.22);color:#fff;font-weight:900;">×{rep_n}</span>' if rep_n > 1 else ""
-        ago_text = f'<span style="margin-left:3px;font-size:11px;opacity:0.85;">({bars_ago}T前)</span>' if bars_ago > 0 else ""
-
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bull rev-taiji-bull"><span class="dot-red"></span>{svg_icon}<span>{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
+            rev_html = f'<div class="rev-bull rev-taiji-bull" style="margin-top:0;"><span class="dot-red"></span>{svg_icon}<span>{rev["pattern"]}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bear rev-taiji-bear"><span class="dot-green"></span>{svg_icon}<span>{rev["pattern"]}{rep_badge}{ago_text}</span></div>'
+            rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{rev["pattern"]}</span></div>'
 
         mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [])
 
         row_str = (
             f'<div class="tf-row tabular">'
-            f'<div class="tf-col-name">'
-            f'<span style="font-size:19px;font-weight:800;color:#ffffff;">{tf["label"]}</span>'
+            f'<div class="tf-header">'
+            f'<span style="font-size:19px;font-weight:800;color:#ffffff;min-width:44px;">{tf["label"]}</span>'
+            f'{badge}{rev_html}'
             f'</div>'
-            f'<div class="tf-col-badge">{badge}{rev_html}</div>'
-            f'<div class="tf-col-ratio">{mini_kline_html}</div>'
+            f'<div class="tf-chart-wrap">{mini_kline_html}</div>'
             f'</div>'
         )
         rows_html.append(row_str)

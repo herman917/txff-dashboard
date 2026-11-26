@@ -143,7 +143,7 @@ class TaiexMarketService:
         self.quotes: Dict[str, Dict[str, Any]] = {
             "TXFF": {
                 "symbol": "TXFF",
-                "name": "台指期近月 (TXFF)",
+                "name": "台股陰陽轉折",
                 "price": 0.0,
                 "previous_close": 0.0,
                 "change": 0.0,
@@ -744,12 +744,12 @@ class TaiexMarketService:
                 txf_prev = txf_quote["previous_close"]
                 txf_ts = txf_quote["market_time"]
                 txf_source = txf_quote["source"]
-                txf_name = f"台指期近月 {txf_quote['contract']}"
+                txf_name = "台股陰陽轉折"
                 self._apply_tick_to_candles("TXFF", txf_price, txf_ts)
             else:
                 txf_price, txf_prev, txf_ts = twii_price, twii_prev, twii_ts
                 txf_source = "Yahoo Finance (^TWII 備援基底)"
-                txf_name = "台指期近月 (TXFF)"
+                txf_name = "台股陰陽轉折"
 
             self._update_quote_state(
                 target="TXFF",
@@ -891,7 +891,7 @@ class TaiexMarketService:
                         is_cached=not market_open,
                         status_text="盤中即時" if market_open else "非盤中/快取狀態",
                         source=txf_res["source"],
-                        name=f"台指期近月 {txf_res['contract']}",
+                        name="台股陰陽轉折",
                     )
                 else:
                     self.quotes["TXFF"]["is_market_open"] = market_open

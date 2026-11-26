@@ -169,7 +169,7 @@ st.markdown(
 
 
 @st.cache_resource
-def get_market_runtime(_version: str = "v6") -> Tuple[TaiexMarketService, asyncio.AbstractEventLoop, threading.Lock]:
+def get_market_runtime(_version: str = "v7") -> Tuple[TaiexMarketService, asyncio.AbstractEventLoop, threading.Lock]:
     """全域共用爬蟲實例與持久事件迴圈，避免多次 asyncio.run() 造成連線池關閉"""
     loop = asyncio.new_event_loop()
     lock = threading.Lock()
@@ -179,7 +179,7 @@ def get_market_runtime(_version: str = "v6") -> Tuple[TaiexMarketService, asynci
     return svc, loop, lock
 
 
-service, _bg_loop, _loop_lock = get_market_runtime("v6")
+service, _bg_loop, _loop_lock = get_market_runtime("v7")
 if not hasattr(service, "ensure_stock_loaded"):
     st.cache_resource.clear()
     st.rerun()

@@ -338,8 +338,8 @@ def _detect_reversal_at_tip(
     if not candles or swing_high is None or swing_low is None:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
 
-    # 以近 15 根 K 線建立「局部波段高低區間」與「前置趨勢方向」，確保只在真正的下跌底部抓轉陽、上漲頂部抓轉陰
-    window = candles[-15:] if len(candles) >= 5 else candles
+    # 以近 10 根 K 線建立「局部波段高低區間」與「前置趨勢方向」，確保只在真正的下跌底部抓轉陽、上漲頂部抓轉陰
+    window = candles[-10:] if len(candles) >= 5 else candles
     w_high = max(c["high"] for c in window)
     w_low = min(c["low"] for c in window)
     w_span = w_high - w_low
@@ -356,10 +356,10 @@ def _detect_reversal_at_tip(
     low_pos = (recent_low - w_low) / w_span
     high_pos = (recent_high - w_low) / w_span
 
-    # 底部轉陽區：近兩根曾觸底 (<=25%)、現價尚未反彈過半 (<=55%)，且高點出現在低點之前（確認已下跌一段）
-    is_near_bottom = (tip_pos <= 0.55 and low_pos <= 0.25 and idx_high < idx_low)
-    # 頂部轉陰區：近兩根曾觸頂 (>=75%)、現價尚未跌破中軸 (>=45%)，且低點出現在高點之前（確認已上漲一段）
-    is_near_top = (tip_pos >= 0.45 and high_pos >= 0.75 and idx_low < idx_high)
+    # 底部轉陽區：近兩根曾觸底 (<=25%)、現價尚未衝過高檔 (<=85%)，且高點出現在低點之前（確認已下跌一段）
+    is_near_bottom = (tip_pos <= 0.85 and low_pos <= 0.25 and idx_high < idx_low)
+    # 頂部轉陰區：近兩根曾觸頂 (>=75%)、現價尚未跌破低檔 (>=15%)，且低點出現在高點之前（確認已上漲一段）
+    is_near_top = (tip_pos >= 0.15 and high_pos >= 0.75 and idx_low < idx_high)
 
     if not is_near_bottom and not is_near_top:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}

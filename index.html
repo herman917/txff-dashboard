@@ -432,7 +432,7 @@
 
     function renderMiniKlineSvg(miniCandles, reversal) {
       if (!miniCandles || miniCandles.length === 0) return '<div class="text-xs text-slate-500">無 K 線資料</div>';
-      const w = 220, h = 100, padTop = 15, padBot = 15;
+      const w = 220, h = 150, padTop = 18, padBot = 18;
       const hi = Math.max(...miniCandles.map(c => c.h));
       const lo = Math.min(...miniCandles.map(c => c.l));
       const span = Math.max(hi - lo, 0.01);
@@ -468,7 +468,7 @@
         }
       }
 
-      return `<div class="relative w-full h-[100px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="100" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
+      return `<div class="relative w-full h-[150px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="150" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
     }
 
     function renderTimeframeRow(tf) {

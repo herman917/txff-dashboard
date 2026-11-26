@@ -261,12 +261,12 @@ def _pattern_svg(pattern: str) -> str:
 
 
 def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 220x104)，並在反轉 K 棒位置標示 ▲轉陽 / ▼轉陰"""
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x156)，並在反轉 K 棒位置標示 ▲轉陽 / ▼轉陰"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
 
-    w, h = 220, 104
-    pad_top, pad_bot = 16, 16
+    w, h = 220, 156
+    pad_top, pad_bot = 18, 18
     hi = max(c["h"] for c in mini_candles)
     lo = min(c["l"] for c in mini_candles)
     span = max(hi - lo, 0.01)
@@ -323,8 +323,8 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
                 )
 
     return (
-        f'<div style="position:relative;width:100%;height:104px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
-        f'<svg width="100%" height="104" viewBox="0 0 {w} {h}" preserveAspectRatio="none" style="display:block;">'
+        f'<div style="position:relative;width:100%;height:156px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
+        f'<svg width="100%" height="156" viewBox="0 0 {w} {h}" preserveAspectRatio="none" style="display:block;">'
         f'{"".join(elems)}</svg>'
         f'{overlay_html}'
         f'</div>'

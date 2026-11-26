@@ -335,10 +335,10 @@ def _detect_reversal_at_tip(
     low_pos = (recent_low - w_low) / w_span
     high_pos = (recent_high - w_low) / w_span
 
-    # 底部轉陽區：目前位於近 15 根波段低檔 (<=35%) 且近兩根曾觸底 (<=20%)，並且高點出現在低點之前（確認已下跌一段）
-    is_near_bottom = (tip_pos <= 0.35 and low_pos <= 0.20 and idx_high < idx_low)
-    # 頂部轉陰區：目前位於近 15 根波段高檔 (>=65%) 且近兩根曾觸頂 (>=80%)，並且低點出現在高點之前（確認已上漲一段）
-    is_near_top = (tip_pos >= 0.65 and high_pos >= 0.80 and idx_low < idx_high)
+    # 底部轉陽區：近兩根曾觸底 (<=25%)、現價尚未反彈過半 (<=55%)，且高點出現在低點之前（確認已下跌一段）
+    is_near_bottom = (tip_pos <= 0.55 and low_pos <= 0.25 and idx_high < idx_low)
+    # 頂部轉陰區：近兩根曾觸頂 (>=75%)、現價尚未跌破中軸 (>=45%)，且低點出現在高點之前（確認已上漲一段）
+    is_near_top = (tip_pos >= 0.45 and high_pos >= 0.75 and idx_low < idx_high)
 
     if not is_near_bottom and not is_near_top:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}

@@ -308,18 +308,18 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
                 )
                 overlay_html = (
                     f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
-                    f'font-size:11px;font-weight:800;color:#fda4af;background:rgba(15,23,42,0.88);'
-                    f'padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▲轉陽</div>'
+                    f'font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;'
+                    f'box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>'
                 )
             else:
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 2}" x2="{rx:.1f}" y2="{h - pad_bot + 4}" '
-                    f'stroke="rgba(16,185,129,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                    f'stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
                 overlay_html = (
                     f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
-                    f'font-size:11px;font-weight:800;color:#6ee7b7;background:rgba(15,23,42,0.88);'
-                    f'padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▼轉陰</div>'
+                    f'font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;'
+                    f'box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>'
                 )
 
     return (

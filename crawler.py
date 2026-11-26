@@ -394,8 +394,12 @@ class TaiexMarketService:
                         prev = float(prev_str) if prev_str and prev_str != "-" else price
                         ts_ms = int(item.get("tlong", 0))
                         ts = ts_ms // 1000 if ts_ms > 0 else int(datetime.now(TAIPEI_TZ).timestamp())
+                        o_str, h_str, l_str = item.get("o"), item.get("h"), item.get("l")
                         return {
                             "price": price,
+                            "open": float(o_str) if o_str and o_str != "-" else price,
+                            "high": float(h_str) if h_str and h_str != "-" else price,
+                            "low": float(l_str) if l_str and l_str != "-" else price,
                             "previous_close": prev,
                             "market_time": ts,
                             "source": "TWSE MIS",
@@ -581,10 +585,17 @@ class TaiexMarketService:
             base_candles["1d"] = self._parse_yahoo_candles(res_1d)
             logger.info(f"基底時框 1d 載入完成，共 {len(base_candles['1d'])} 根 K 線")
 
-        # 若 1d 仍因限流失敗，改由 5m 重採樣補齊日 K，確保日/週/月不為空
+        # 若 1d 仍因限流失敗，改由 5m 重採樣補齊日 K；若 1d 缺漏最近交易日（如 Yahoo 延遲），也用 5m 補齊
         if not base_candles["1d"] and base_candles["5m"]:
             base_candles["1d"] = self._resample_candles(base_candles["5m"], "1d")
             logger.warning(f"1d 由 5m 重採樣補齊，共 {len(base_candles['1d'])} 根")
+        elif base_candles["1d"] and base_candles["5m"]:
+            daily_from_5m = self._resample_candles(base_candles["5m"], "1d")
+            last_1d_bucket = get_bucket_start_ts(base_candles["1d"][-1]["timestamp"], "1d")
+            extra_days = [c for c in daily_from_5m if c["timestamp"] > last_1d_bucket]
+            if extra_days:
+                base_candles["1d"].extend(extra_days)
+                logger.info(f"1d 已由 5m 補齊最新 {len(extra_days)} 個交易日")
 
         for sub_tf in ("15m", "30m", "60m"):
             if base_candles["5m"]:
@@ -651,6 +662,14 @@ class TaiexMarketService:
                 twii_ts = twse_quote["market_time"]
                 twii_source = twse_quote["source"]
                 self._apply_tick_to_candles("TWII", twii_price, twii_ts)
+                # 以 TWSE MIS 真實開高低更新當日日 K
+                if self.candles_by_target["TWII"]["1d"]:
+                    d_last = self.candles_by_target["TWII"]["1d"][-1]
+                    if get_bucket_start_ts(d_last["timestamp"], "1d") == get_bucket_start_ts(twii_ts, "1d"):
+                        d_last["open"] = round(twse_quote.get("open", twii_price), 2)
+                        d_last["high"] = round(max(d_last["high"], twse_quote.get("high", twii_price)), 2)
+                        d_last["low"] = round(min(d_last["low"], twse_quote.get("low", twii_price)), 2)
+                        d_last["close"] = round(twii_price, 2)
             elif daily:
                 last_d = daily[-1]
                 prev_d = daily[-2] if len(daily) >= 2 else last_d

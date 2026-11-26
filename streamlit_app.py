@@ -73,9 +73,9 @@ st.markdown(
         border-bottom: 1px solid #1e293b;
       }
       .tf-row:last-child { border-bottom: none; }
-      .tf-col-name { flex: 0 0 68px; }
-      .tf-col-badge { flex: 0 0 60px; text-align: center; }
-      .tf-col-ratio { flex: 1 1 240px; min-width: 210px; }
+      .tf-col-name { flex: 0 0 60px; }
+      .tf-col-badge { flex: 0 0 auto; min-width: 68px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+      .tf-col-ratio { flex: 1 1 220px; min-width: 190px; }
       .badge-bull {
         display: inline-block; width: 54px; padding: 4px 0; border-radius: 6px;
         background: #e11d48; color: #fff; font-weight: 800; font-size: 14px; text-align: center;
@@ -258,12 +258,12 @@ def _pattern_svg(pattern: str) -> str:
 
 
 def _mini_kline_svg(mini_candles: list) -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 200x48)"""
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x96)"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
 
-    w, h = 200, 48
-    pad_y = 4
+    w, h = 220, 96
+    pad_y = 6
     hi = max(c["h"] for c in mini_candles)
     lo = min(c["l"] for c in mini_candles)
     span = max(hi - lo, 0.01)
@@ -273,7 +273,7 @@ def _mini_kline_svg(mini_candles: list) -> str:
 
     n = len(mini_candles)
     step = w / max(n, 1)
-    bar_w = max(3.0, min(8.0, step * 0.65))
+    bar_w = max(3.5, min(9.0, step * 0.65))
     elems = []
     for i, c in enumerate(mini_candles):
         cx = i * step + step / 2.0
@@ -281,13 +281,13 @@ def _mini_kline_svg(mini_candles: list) -> str:
         col = "#f43f5e" if c["c"] > c["o"] else ("#10b981" if c["c"] < c["o"] else "#94a3b8")
         op = "0.55" if c.get("forming") else "1"
         body_top = min(yo, yc)
-        body_h = max(abs(yc - yo), 1.5)
-        elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.2" opacity="{op}"/>')
+        body_h = max(abs(yc - yo), 2.0)
+        elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.3" opacity="{op}"/>')
         elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
 
     return (
-        f'<svg width="100%" height="48" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
-        f'style="background:#020617;border:1px solid #1e293b;border-radius:6px;display:block;max-width:240px;">'
+        f'<svg width="100%" height="96" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
+        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;max-width:340px;">'
         f'{"".join(elems)}</svg>'
     )
 
@@ -395,11 +395,8 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             f'<div class="tf-col-name">'
             f'<span style="font-size:19px;font-weight:800;color:#ffffff;">{tf["label"]}</span>'
             f'</div>'
-            f'<div class="tf-col-badge">{badge}</div>'
-            f'<div class="tf-col-ratio">'
-            f'{mini_kline_html}'
-            f'{rev_html}'
-            f'</div>'
+            f'<div class="tf-col-badge">{badge}{rev_html}</div>'
+            f'<div class="tf-col-ratio">{mini_kline_html}</div>'
             f'</div>'
         )
         rows_html.append(row_str)

@@ -612,14 +612,33 @@ def evaluate_all_timeframes(
         has_forming = bool(candles and len(confirmed_candles) < len(candles))
         forming_color = _candle_color(candles[-1]) if has_forming else None
 
-        # 提供最近最多 18 根 K 線供前端繪製縮小 K 線走勢圖
+        # 提供最近最多 18 根 K 線供前端繪製縮小 K 線走勢圖，並標出圖內所有轉陽 / 轉陰位置
+        vis_count = 17 if has_forming else 18
+        vis_start = max(0, len(confirmed_candles) - vis_count)
         mini_candles = [
             {"o": c["open"], "h": c["high"], "l": c["low"], "c": c["close"], "forming": False}
-            for c in confirmed_candles[-17:]
+            for c in confirmed_candles[vis_start:]
         ]
         if has_forming:
             lc = candles[-1]
             mini_candles.append({"o": lc["open"], "h": lc["high"], "l": lc["low"], "c": lc["close"], "forming": True})
+
+        chart_markers: List[Dict[str, Any]] = []
+        last_marker_sig = "none"
+        for abs_idx in range(vis_start, len(confirmed_candles)):
+            sub = confirmed_candles[: abs_idx + 1]
+            sig = _detect_reversal_at_tip(sub, {"value": None}, 1.0, 0.0)
+            if sig["signal"] in ("bull_reversal", "bear_reversal"):
+                # 同一波轉向只標示首次轉折點，避免連續多根重複疊字
+                if sig["signal"] != last_marker_sig:
+                    chart_markers.append({
+                        "vis_idx": abs_idx - vis_start,
+                        "signal": sig["signal"],
+                        "pattern": sig["pattern"],
+                    })
+                    last_marker_sig = sig["signal"]
+            elif sig["zone"] == "mid":
+                last_marker_sig = "none"
 
         results.append({
             "timeframe": tf_key,
@@ -636,6 +655,7 @@ def evaluate_all_timeframes(
             "recent_colors": recent_colors,
             "forming_color": forming_color,
             "mini_candles": mini_candles,
+            "chart_markers": chart_markers,
         })
 
     return results

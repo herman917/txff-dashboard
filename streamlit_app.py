@@ -260,8 +260,8 @@ def _pattern_svg(pattern: str) -> str:
     return svgs.get(pattern, "")
 
 
-def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 220x156)，並在反轉 K 棒位置標示 ▲轉陽 / ▼轉陰"""
+def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: list = None) -> str:
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x156)，保留圖內所有 ▲轉陽 / ▼轉陰 轉折標示"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
 
@@ -290,23 +290,29 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
         elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.3" opacity="{op}"/>')
         elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
 
-    # 在觸發反轉的該根已收線 K 棒位置，以 HTML 疊加不變形的 ▲轉陽 / ▼轉陰 標籤
+    # 保留 K 線圖內所有 ▲轉陽 / ▼轉陰 轉折標誌
+    markers = list(chart_markers or [])
     rev = reversal or {}
     sig = rev.get("signal", "none")
-    overlay_html = ""
     if sig in ("bull_reversal", "bear_reversal"):
         has_forming = 1 if mini_candles[-1].get("forming") else 0
-        bars_ago = int(rev.get("bars_ago", 0))
-        rev_idx = n - 1 - has_forming - bars_ago
-        if 0 <= rev_idx < n:
-            rx, _, _ = coords[rev_idx]
+        rev_idx = n - 1 - has_forming - int(rev.get("bars_ago", 0))
+        if 0 <= rev_idx < n and not any(m.get("vis_idx") == rev_idx for m in markers):
+            markers.append({"vis_idx": rev_idx, "signal": sig})
+
+    overlay_parts = []
+    for m in markers:
+        m_idx = m.get("vis_idx", -1)
+        m_sig = m.get("signal")
+        if 0 <= m_idx < n and m_sig in ("bull_reversal", "bear_reversal"):
+            rx, _, _ = coords[m_idx]
             left_pct = max(8.0, min(92.0, (rx / w) * 100.0))
-            if sig == "bull_reversal":
+            if m_sig == "bull_reversal":
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 4}" x2="{rx:.1f}" y2="{h - pad_bot + 2}" '
-                    f'stroke="rgba(244,63,94,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                    f'stroke="rgba(244,63,94,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
-                overlay_html = (
+                overlay_parts.append(
                     f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
                     f'font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;'
                     f'box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>'
@@ -316,11 +322,12 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
                     f'<line x1="{rx:.1f}" y1="{pad_top - 2}" x2="{rx:.1f}" y2="{h - pad_bot + 4}" '
                     f'stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
-                overlay_html = (
+                overlay_parts.append(
                     f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
                     f'font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;'
                     f'box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>'
                 )
+    overlay_html = "".join(overlay_parts)
 
     return (
         f'<div style="position:relative;width:100%;height:156px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
@@ -427,7 +434,7 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
             rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{pat_label}</span></div>'
 
-        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], rev)
+        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], rev, tf.get("chart_markers") or [])
 
         row_str = (
             f'<div class="tf-row tabular">'

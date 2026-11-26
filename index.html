@@ -430,7 +430,7 @@
       return svgs[pattern] || '';
     }
 
-    function renderMiniKlineSvg(miniCandles, reversal) {
+    function renderMiniKlineSvg(miniCandles, reversal, chartMarkers) {
       if (!miniCandles || miniCandles.length === 0) return '<div class="text-xs text-slate-500">無 K 線資料</div>';
       const w = 220, h = 150, padTop = 18, padBot = 18;
       const hi = Math.max(...miniCandles.map(c => c.h));
@@ -451,28 +451,36 @@
         return `<line x1="${cx.toFixed(1)}" y1="${yh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yl.toFixed(1)}" stroke="${col}" stroke-width="1.3" opacity="${op}"/><rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="0.8" fill="${col}" opacity="${op}"/>`;
       });
 
-      let overlayHtml = '';
+      const markers = [...(chartMarkers || [])];
       if (reversal && (reversal.signal === 'bull_reversal' || reversal.signal === 'bear_reversal')) {
         const hasForming = miniCandles[miniCandles.length - 1].forming ? 1 : 0;
         const revIdx = miniCandles.length - 1 - hasForming - (reversal.bars_ago || 0);
-        if (revIdx >= 0 && revIdx < coords.length) {
-          const [rx] = coords[revIdx];
-          const leftPct = Math.max(8, Math.min(92, (rx / w) * 100));
-          if (reversal.signal === 'bull_reversal') {
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="rgba(244,63,94,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml = `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
-          } else {
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml = `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
-          }
+        if (revIdx >= 0 && revIdx < coords.length && !markers.some(m => m.vis_idx === revIdx)) {
+          markers.push({ vis_idx: revIdx, signal: reversal.signal });
         }
       }
+
+      let overlayHtml = '';
+      markers.forEach(m => {
+        const mIdx = m.vis_idx;
+        if (mIdx >= 0 && mIdx < coords.length) {
+          const [rx] = coords[mIdx];
+          const leftPct = Math.max(8, Math.min(92, (rx / w) * 100));
+          if (m.signal === 'bull_reversal') {
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="rgba(244,63,94,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml += `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
+          } else if (m.signal === 'bear_reversal') {
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml += `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
+          }
+        }
+      });
 
       return `<div class="relative w-full h-[150px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="150" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
     }
 
     function renderTimeframeRow(tf) {
-      const { label, latest_candle, streak, reversal, mini_candles } = tf;
+      const { label, latest_candle, streak, reversal, mini_candles, chart_markers } = tf;
 
       let reversalHtml = '';
       if (reversal && reversal.signal !== 'none') {
@@ -581,7 +589,7 @@
           </div>
           <!-- 下方：縮小 K 線走勢圖 -->
           <div class="w-full tabular-nums">
-            ${renderMiniKlineSvg(mini_candles, reversal)}
+            ${renderMiniKlineSvg(mini_candles, reversal, chart_markers)}
           </div>
         </div>
       `;

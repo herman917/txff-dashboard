@@ -80,13 +80,11 @@
               <label for="interval-select" class="text-slate-400 whitespace-nowrap">更新週期</label>
               <select id="interval-select" onchange="changeRefreshInterval(this.value)"
                       class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-1.5 py-0.5 focus:outline-none focus:border-sky-500 cursor-pointer">
-                <option value="10">10 秒</option>
-                <option value="20" selected>20 秒</option>
-                <option value="30">30 秒</option>
+                <option value="30" selected>30 秒</option>
                 <option value="60">1 分鐘</option>
-                <option value="300">5 分鐘</option>
+                <option value="900">15 分鐘</option>
               </select>
-              <span class="text-slate-300 whitespace-nowrap w-12 text-right">(<span id="countdown-sec">20s</span>)</span>
+              <span class="text-slate-300 whitespace-nowrap w-12 text-right">(<span id="countdown-sec">30s</span>)</span>
               <div class="w-full sm:w-28 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div id="countdown-bar" class="h-full bg-sky-500 transition-all duration-100 ease-linear" style="width: 100%"></div>
               </div>
@@ -140,9 +138,9 @@
   </div>
 
   <script>
-    const ALLOWED_INTERVALS = [10, 20, 30, 60, 300];
+    const ALLOWED_INTERVALS = [30, 60, 900];
     const ALLOWED_TARGETS = ['TXFF', 'TWII'];
-    let refreshIntervalMs = 20000;
+    let refreshIntervalMs = 30000;
     const MAX_STREAK_BARS = 8; // 雙向進度條滿格上限（8 根）
     let countdownRemainingMs = refreshIntervalMs;
     let lastTickTime = Date.now();
@@ -403,7 +401,7 @@
       return svgs[pattern] || '';
     }
 
-    function renderMiniKlineSvg(miniCandles) {
+    function renderMiniKlineSvg(miniCandles, status) {
       if (!miniCandles || miniCandles.length === 0) return '<div class="text-xs text-slate-500">無 K 線資料</div>';
       const w = 220, h = 88, padY = 6;
       const hi = Math.max(...miniCandles.map(c => c.h));
@@ -421,7 +419,10 @@
         const bh = Math.max(Math.abs(yc - yo), 2);
         return `<line x1="${cx.toFixed(1)}" y1="${yh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yl.toFixed(1)}" stroke="${col}" stroke-width="1.3" opacity="${op}"/><rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="0.8" fill="${col}" opacity="${op}"/>`;
       }).join('');
-      return `<svg width="100%" height="88" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 border border-slate-800 rounded-lg w-full">${elems}</svg>`;
+      const borderCls = status === '陽'
+        ? 'border-2 border-rose-500 shadow-md shadow-rose-500/30'
+        : (status === '陰' ? 'border-2 border-emerald-500 shadow-md shadow-emerald-500/30' : 'border border-slate-800');
+      return `<svg width="100%" height="88" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 ${borderCls} rounded-lg w-full">${elems}</svg>`;
     }
 
     function renderTimeframeRow(tf) {
@@ -429,10 +430,11 @@
 
       let reversalHtml = '';
       if (reversal && reversal.signal !== 'none') {
+        const patLabel = (reversal.pattern || '').replace(/多頭|空頭/g, '');
         if (reversal.signal === 'bull_reversal') {
-          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}</span></div>`;
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${patLabel}</span></div>`;
         } else if (reversal.signal === 'bear_reversal') {
-          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${reversal.pattern}</span></div>`;
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${patLabel}</span></div>`;
         }
       }
 
@@ -520,18 +522,20 @@
         : '';
       const stripHtml = `<div class="flex items-center flex-wrap gap-1 mt-1.5"><span class="text-[11px] text-slate-400 mr-1">近${recentColors.length}T:</span>${blocksHtml}${formingHtml}</div>`;
 
+      const tfColorCls = streak.status === '陽' ? 'text-rose-400' : (streak.status === '陰' ? 'text-emerald-400' : 'text-slate-100');
+
       return `
         <div class="flex flex-col gap-2.5 px-4 py-3 hover:bg-slate-800/35 transition">
           <!-- 上方：週期 + 陰陽狀態 + 反轉亮燈 -->
           <div class="flex flex-wrap items-center gap-2.5">
-            <span class="text-base font-bold text-slate-100 w-10">${label}</span>
+            <span class="text-base font-bold ${tfColorCls} w-10">${label}</span>
             ${statusBadgeHtml}
             ${reversalHtml}
             <span class="ml-auto text-[11px] text-slate-500 tabular-nums">${ohlcInfo}</span>
           </div>
           <!-- 下方：縮小 K 線走勢圖 -->
           <div class="w-full tabular-nums">
-            ${renderMiniKlineSvg(mini_candles)}
+            ${renderMiniKlineSvg(mini_candles, streak.status)}
           </div>
         </div>
       `;

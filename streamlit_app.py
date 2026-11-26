@@ -191,11 +191,9 @@ def run_async(coro):
 
 # 頂部控制列（手機自動堆疊）
 INTERVAL_OPTIONS = {
-    "10 秒": 10,
-    "20 秒": 20,
     "30 秒": 30,
     "1 分鐘": 60,
-    "5 分鐘": 300,
+    "15 分鐘": 900,
 }
 
 c1, c2, c3 = st.columns([2.2, 1.3, 1])
@@ -211,7 +209,7 @@ with c2:
     interval_label = st.selectbox(
         "更新週期",
         options=list(INTERVAL_OPTIONS.keys()),
-        index=1,  # 預設 20 秒
+        index=0,  # 預設 30 秒
         label_visibility="collapsed",
     )
 with c3:
@@ -262,10 +260,17 @@ def _pattern_svg(pattern: str) -> str:
     return svgs.get(pattern, "")
 
 
-def _mini_kline_svg(mini_candles: list) -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 220x96)"""
+def _mini_kline_svg(mini_candles: list, status: str = "盤整") -> str:
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x96)，依陽/陰狀態變換外框亮紅/亮綠"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
+
+    if status == "陽":
+        box_style = "background:#020617;border:1.5px solid #f43f5e;box-shadow:0 0 10px rgba(244,63,94,0.35);border-radius:8px;display:block;"
+    elif status == "陰":
+        box_style = "background:#020617;border:1.5px solid #10b981;box-shadow:0 0 10px rgba(16,185,129,0.35);border-radius:8px;display:block;"
+    else:
+        box_style = "background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;"
 
     w, h = 220, 96
     pad_y = 6
@@ -292,7 +297,7 @@ def _mini_kline_svg(mini_candles: list) -> str:
 
     return (
         f'<svg width="100%" height="96" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
-        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;">'
+        f'style="{box_style}">'
         f'{"".join(elems)}</svg>'
     )
 
@@ -374,26 +379,31 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
 
         if st_info["status"] == "陽":
             badge = '<span class="badge-bull">陽</span>'
+            tf_color = "#fb7185"
         elif st_info["status"] == "陰":
             badge = '<span class="badge-bear">陰</span>'
+            tf_color = "#34d399"
         else:
             badge = '<span class="badge-flat">盤整</span>'
+            tf_color = "#ffffff"
 
         rev = tf.get("reversal") or {}
         rev_html = ""
         if rev.get("signal") == "bull_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bull rev-taiji-bull" style="margin-top:0;"><span class="dot-red"></span>{svg_icon}<span>{rev["pattern"]}</span></div>'
+            pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
+            rev_html = f'<div class="rev-bull rev-taiji-bull" style="margin-top:0;"><span class="dot-red"></span>{svg_icon}<span>{pat_label}</span></div>'
         elif rev.get("signal") == "bear_reversal":
             svg_icon = _pattern_svg(rev["pattern"])
-            rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{rev["pattern"]}</span></div>'
+            pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
+            rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{pat_label}</span></div>'
 
-        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [])
+        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], st_info["status"])
 
         row_str = (
             f'<div class="tf-row tabular">'
             f'<div class="tf-header">'
-            f'<span style="font-size:19px;font-weight:800;color:#ffffff;min-width:44px;">{tf["label"]}</span>'
+            f'<span style="font-size:19px;font-weight:800;color:{tf_color};min-width:44px;">{tf["label"]}</span>'
             f'{badge}{rev_html}'
             f'</div>'
             f'<div class="tf-chart-wrap">{mini_kline_html}</div>'

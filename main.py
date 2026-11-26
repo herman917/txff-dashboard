@@ -28,9 +28,9 @@ market_service = TaiexMarketService()
 # 儲存各時框當前的 ZigZag 轉折閾值（小數形式，如 0.03 = 3%），支援執行期動態調整
 current_thresholds: Dict[str, float] = dict(DEFAULT_THRESHOLDS)
 
-# 支援的自動更新秒數選項：10秒, 20秒, 30秒, 1分鐘(60秒), 5分鐘(300秒)
-ALLOWED_INTERVALS = {10, 20, 30, 60, 300}
-poll_interval_sec: int = 20
+# 支援的自動更新秒數選項：30秒, 1分鐘(60秒), 15分鐘(900秒)
+ALLOWED_INTERVALS = {30, 60, 900}
+poll_interval_sec: int = 30
 _interval_changed_event = asyncio.Event()
 
 

@@ -296,21 +296,31 @@ def _detect_reversal_at_tip(
     swing_low: Optional[float],
 ) -> Dict[str, Any]:
     """檢查 candles 最後一根位置是否符合底部轉陽或高檔轉陰反轉型態（單點判定）"""
-    pos = ratio_info.get("value")
-    if not candles or pos is None or swing_high is None or swing_low is None:
+    if not candles or swing_high is None or swing_low is None:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
 
-    span = swing_high - swing_low
+    # 以近 15 根 K 線建立「局部波段高低區間」與「前置趨勢方向」，確保只在真正的下跌底部抓轉陽、上漲頂部抓轉陰
+    window = candles[-15:] if len(candles) >= 5 else candles
+    w_high = max(c["high"] for c in window)
+    w_low = min(c["low"] for c in window)
+    w_span = w_high - w_low
+    if w_span <= 0:
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
+
+    idx_high = max(range(len(window)), key=lambda i: window[i]["high"])
+    idx_low = min(range(len(window)), key=lambda i: window[i]["low"])
+
     c1 = candles[-1]
     recent_low = min(c["low"] for c in candles[-2:]) if len(candles) >= 2 else c1["low"]
     recent_high = max(c["high"] for c in candles[-2:]) if len(candles) >= 2 else c1["high"]
-    low_pos = (recent_low - swing_low) / span if span > 0 else pos
-    high_pos = (recent_high - swing_low) / span if span > 0 else pos
+    tip_pos = (c1["close"] - w_low) / w_span
+    low_pos = (recent_low - w_low) / w_span
+    high_pos = (recent_high - w_low) / w_span
 
-    # 底部附近：現價在 -20%~25%，或近兩根最低點有觸及底部區 (<=15%) 且現價尚未反彈超過 45%
-    is_near_bottom = (-0.20 <= pos <= 0.25) or (-0.30 <= low_pos <= 0.15 and pos <= 0.45)
-    # 高檔附近：現價在 75%~120%，或近兩根最高點有觸及高檔區 (>=85%) 且現價尚未回落低於 55%
-    is_near_top = (0.75 <= pos <= 1.20) or (0.85 <= high_pos <= 1.30 and pos >= 0.55)
+    # 底部轉陽區：目前位於近 15 根波段低檔 (<=35%) 且近兩根曾觸底 (<=20%)，並且高點出現在低點之前（確認已下跌一段）
+    is_near_bottom = (tip_pos <= 0.35 and low_pos <= 0.20 and idx_high < idx_low)
+    # 頂部轉陰區：目前位於近 15 根波段高檔 (>=65%) 且近兩根曾觸頂 (>=80%)，並且低點出現在高點之前（確認已上漲一段）
+    is_near_top = (tip_pos >= 0.65 and high_pos >= 0.80 and idx_low < idx_high)
 
     if not is_near_bottom and not is_near_top:
         return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
@@ -319,13 +329,13 @@ def _detect_reversal_at_tip(
     c1_top, c1_bot = max(c1["open"], c1["close"]), min(c1["open"], c1["close"])
 
     if is_near_bottom:
-        # 1. 多頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體須有明顯向下跳空缺口 (>= max(15點, 0.05%))
+        # 1. 多頭島型反轉（太極陰陽）：中間實體向下跳空孤立，右邊實體需收紅向上反攻
         if len(candles) >= 3:
             c2, c3 = candles[-2], candles[-3]
             c2_top = max(c2["open"], c2["close"])
             c3_bot = min(c3["open"], c3["close"])
-            min_gap = max(15.0, 0.0005 * c1["close"])
-            if (c3_bot - c2_top) >= min_gap and (c1_bot - c2_top) >= min_gap:
+            min_gap = max(15.0, 0.001 * c1["close"])
+            if m1["is_bull"] and (c3_bot - c2_top) >= min_gap and (c1_bot - c2_top) >= min_gap:
                 return {"signal": "bull_reversal", "pattern": "多頭島型反轉", "zone": "bottom", "is_taiji": True}
 
         if len(candles) >= 2:
@@ -362,13 +372,13 @@ def _detect_reversal_at_tip(
         return {"signal": "none", "pattern": None, "zone": "bottom", "is_taiji": False}
 
     # is_near_top: 轉陰（頭部型態）-> 綠色亮燈
-    # 1. 空頭島型反轉（太極陰陽）：只看實體不管影線與紅黑，中間實體須有明顯向上跳空缺口 (>= max(15點, 0.05%))
+    # 1. 空頭島型反轉（太極陰陽）：中間實體向上跳空孤立，右邊實體需收黑向下反轉
     if len(candles) >= 3:
         c2, c3 = candles[-2], candles[-3]
         c2_bot = min(c2["open"], c2["close"])
         c3_top = max(c3["open"], c3["close"])
-        min_gap = max(15.0, 0.0005 * c1["close"])
-        if (c2_bot - c3_top) >= min_gap and (c2_bot - c1_top) >= min_gap:
+        min_gap = max(15.0, 0.001 * c1["close"])
+        if m1["is_bear"] and (c2_bot - c3_top) >= min_gap and (c2_bot - c1_top) >= min_gap:
             return {"signal": "bear_reversal", "pattern": "空頭島型反轉", "zone": "top", "is_taiji": True}
 
     if len(candles) >= 2:

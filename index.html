@@ -445,25 +445,24 @@
         return `<line x1="${cx.toFixed(1)}" y1="${yh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yl.toFixed(1)}" stroke="${col}" stroke-width="1.3" opacity="${op}"/><rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="0.8" fill="${col}" opacity="${op}"/>`;
       });
 
+      let overlayHtml = '';
       if (reversal && (reversal.signal === 'bull_reversal' || reversal.signal === 'bear_reversal')) {
         const hasForming = miniCandles[miniCandles.length - 1].forming ? 1 : 0;
         const revIdx = miniCandles.length - 1 - hasForming - (reversal.bars_ago || 0);
         if (revIdx >= 0 && revIdx < coords.length) {
-          const [rx, ryh, ryl] = coords[revIdx];
-          const tx = Math.max(22, Math.min(w - 22, rx));
+          const [rx] = coords[revIdx];
+          const leftPct = Math.max(8, Math.min(92, (rx / w) * 100));
           if (reversal.signal === 'bull_reversal') {
-            const ly = Math.min(h - 3, ryl + 12);
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="rgba(244,63,94,0.35)" stroke-width="1" stroke-dasharray="2,2"/>`);
-            elems.push(`<text x="${tx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" fill="#fda4af" font-size="9.5" font-weight="800">▲轉陽</text>`);
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="rgba(244,63,94,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml = `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11px;font-weight:800;color:#fda4af;background:rgba(15,23,42,0.88);padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
           } else {
-            const ly = Math.max(10, ryh - 4);
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="rgba(16,185,129,0.35)" stroke-width="1" stroke-dasharray="2,2"/>`);
-            elems.push(`<text x="${tx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" fill="#6ee7b7" font-size="9.5" font-weight="800">▼轉陰</text>`);
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="rgba(16,185,129,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml = `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11px;font-weight:800;color:#6ee7b7;background:rgba(15,23,42,0.88);padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
           }
         }
       }
 
-      return `<svg width="100%" height="100" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="bg-slate-950 border border-slate-800 rounded-lg w-full">${elems.join('')}</svg>`;
+      return `<div class="relative w-full h-[100px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="100" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
     }
 
     function renderTimeframeRow(tf) {

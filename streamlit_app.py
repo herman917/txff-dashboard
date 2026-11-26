@@ -290,41 +290,44 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
         elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.3" opacity="{op}"/>')
         elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
 
-    # 在觸發反轉的該根已收線 K 棒位置標示 ▲轉陽 或 ▼轉陰
+    # 在觸發反轉的該根已收線 K 棒位置，以 HTML 疊加不變形的 ▲轉陽 / ▼轉陰 標籤
     rev = reversal or {}
     sig = rev.get("signal", "none")
+    overlay_html = ""
     if sig in ("bull_reversal", "bear_reversal"):
         has_forming = 1 if mini_candles[-1].get("forming") else 0
         bars_ago = int(rev.get("bars_ago", 0))
         rev_idx = n - 1 - has_forming - bars_ago
         if 0 <= rev_idx < n:
-            rx, ryh, ryl = coords[rev_idx]
-            tx = max(22.0, min(w - 22.0, rx))
+            rx, _, _ = coords[rev_idx]
+            left_pct = max(8.0, min(92.0, (rx / w) * 100.0))
             if sig == "bull_reversal":
-                ly = min(h - 3.0, ryl + 12.0)
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 4}" x2="{rx:.1f}" y2="{h - pad_bot + 2}" '
-                    f'stroke="rgba(244,63,94,0.35)" stroke-width="1" stroke-dasharray="2,2"/>'
+                    f'stroke="rgba(244,63,94,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
-                elems.append(
-                    f'<text x="{tx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#fda4af" '
-                    f'font-size="9.5" font-weight="800">▲轉陽</text>'
+                overlay_html = (
+                    f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
+                    f'font-size:11px;font-weight:800;color:#fda4af;background:rgba(15,23,42,0.88);'
+                    f'padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▲轉陽</div>'
                 )
             else:
-                ly = max(10.0, ryh - 4.0)
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 2}" x2="{rx:.1f}" y2="{h - pad_bot + 4}" '
-                    f'stroke="rgba(16,185,129,0.35)" stroke-width="1" stroke-dasharray="2,2"/>'
+                    f'stroke="rgba(16,185,129,0.45)" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
-                elems.append(
-                    f'<text x="{tx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#6ee7b7" '
-                    f'font-size="9.5" font-weight="800">▼轉陰</text>'
+                overlay_html = (
+                    f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
+                    f'font-size:11px;font-weight:800;color:#6ee7b7;background:rgba(15,23,42,0.88);'
+                    f'padding:0 4px;border-radius:3px;white-space:nowrap;pointer-events:none;">▼轉陰</div>'
                 )
 
     return (
-        f'<svg width="100%" height="104" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
-        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;">'
+        f'<div style="position:relative;width:100%;height:104px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
+        f'<svg width="100%" height="104" viewBox="0 0 {w} {h}" preserveAspectRatio="none" style="display:block;">'
         f'{"".join(elems)}</svg>'
+        f'{overlay_html}'
+        f'</div>'
     )
 
 

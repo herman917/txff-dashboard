@@ -88,17 +88,23 @@ def is_taifex_market_open(now: Optional[datetime] = None) -> Tuple[bool, str]:
     return False, fallback_mt
 
 
-def get_bucket_start_ts(ts: int, tf_key: str) -> int:
+def get_bucket_start_ts(ts: int, tf_key: str, align_0845: bool = False) -> int:
     """
     根據台北時間與週期類型，計算該時間戳所屬 K 線的起始時間戳 (Unix seconds)。
-    用於判斷即時報價應「更新當前最後一根 K 線」或「開啟新的一根 K 線」。
+    align_0845=True 時（台指期 TXFF 日盤），08:45 ~ 13:45 依 08:45 開盤對齊（時K: 08:45, 09:45, 10:45...）。
     """
     dt = datetime.fromtimestamp(ts, tz=TAIPEI_TZ)
 
     if tf_key in ("5m", "15m", "30m", "60m"):
         minutes = int(tf_key.replace("m", ""))
         total_min = dt.hour * 60 + dt.minute
-        bucket_min = (total_min // minutes) * minutes
+        day_start = 8 * 60 + 45
+        day_end = 13 * 60 + 45
+        if align_0845 and day_start <= total_min <= day_end:
+            elapsed = total_min - day_start
+            bucket_min = day_start + (elapsed // minutes) * minutes
+        else:
+            bucket_min = (total_min // minutes) * minutes
         bucket_dt = dt.replace(
             hour=bucket_min // 60,
             minute=bucket_min % 60,
@@ -568,13 +574,17 @@ class TaiexMarketService:
         return candles
 
     @staticmethod
-    def _resample_candles(candles: List[Dict[str, Any]], target_tf: str) -> List[Dict[str, Any]]:
+    def _resample_candles(
+        candles: List[Dict[str, Any]],
+        target_tf: str,
+        align_0845: bool = False,
+    ) -> List[Dict[str, Any]]:
         """由較短週期 K 線重採樣合成目標週期 K 線（作為 API 限流時的自動備援）"""
         if not candles:
             return []
         buckets: Dict[int, Dict[str, Any]] = {}
         for c in candles:
-            b_ts = get_bucket_start_ts(c["timestamp"], target_tf)
+            b_ts = get_bucket_start_ts(c["timestamp"], target_tf, align_0845=align_0845)
             if b_ts not in buckets:
                 buckets[b_ts] = {
                     "timestamp": b_ts,
@@ -676,15 +686,14 @@ class TaiexMarketService:
                 self.candles_by_target["TWII"]["1wk"] = self._resample_candles(taiex_daily_candles, "1wk")
                 logger.info(f"TWII 日K載入完成：{len(taiex_daily_candles)} 根，週K：{len(self.candles_by_target['TWII']['1wk'])} 根")
 
-            # 將 TXFF 真實日/夜盤 1分K 重採樣併入 TXFF 的 5m / 15m / 30m / 60m
+            # 將 TXFF 真實日/夜盤 1分K 重採樣併入 TXFF 的 5m / 15m / 30m / 60m（日盤依 08:45 對齊）
             if txf_1m_candles:
                 first_txf_ts = txf_1m_candles[0]["timestamp"]
                 for tf_key in ("5m", "15m", "30m", "60m"):
-                    txf_tf = self._resample_candles(txf_1m_candles, tf_key)
-                    # 保留早於 TXFF 當盤起始時間的歷史基底，後面銜接真實 TXFF K 線
+                    txf_tf = self._resample_candles(txf_1m_candles, tf_key, align_0845=True)
                     hist_part = [
                         c for c in self.candles_by_target["TXFF"][tf_key]
-                        if c["timestamp"] < get_bucket_start_ts(first_txf_ts, tf_key)
+                        if c["timestamp"] < get_bucket_start_ts(first_txf_ts, tf_key, align_0845=True)
                     ]
                     self.candles_by_target["TXFF"][tf_key] = hist_part + txf_tf
 
@@ -800,8 +809,9 @@ class TaiexMarketService:
         if price <= 0:
             return
 
+        is_txf = (target == "TXFF")
         for tf_key, candles in self.candles_by_target[target].items():
-            bucket_ts = get_bucket_start_ts(tick_ts, tf_key)
+            bucket_ts = get_bucket_start_ts(tick_ts, tf_key, align_0845=is_txf)
             if not candles:
                 candles.append({
                     "timestamp": bucket_ts,
@@ -813,7 +823,7 @@ class TaiexMarketService:
                 continue
 
             last_candle = candles[-1]
-            last_bucket = get_bucket_start_ts(last_candle["timestamp"], tf_key)
+            last_bucket = get_bucket_start_ts(last_candle["timestamp"], tf_key, align_0845=is_txf)
 
             if bucket_ts > last_bucket:
                 candles.append({
@@ -864,10 +874,10 @@ class TaiexMarketService:
                     if txf_1m:
                         first_ts = txf_1m[0]["timestamp"]
                         for tf_key in ("5m", "15m", "30m", "60m"):
-                            txf_tf = self._resample_candles(txf_1m, tf_key)
+                            txf_tf = self._resample_candles(txf_1m, tf_key, align_0845=True)
                             hist_part = [
                                 c for c in self.candles_by_target["TXFF"][tf_key]
-                                if c["timestamp"] < get_bucket_start_ts(first_ts, tf_key)
+                                if c["timestamp"] < get_bucket_start_ts(first_ts, tf_key, align_0845=True)
                             ]
                             self.candles_by_target["TXFF"][tf_key] = hist_part + txf_tf
                     if market_open:

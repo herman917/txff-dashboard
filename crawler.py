@@ -433,6 +433,78 @@ class TaiexMarketService:
             logger.warning(f"TWSE 個股報價抓取失敗 ({stock_code}): {exc}")
         return None
 
+    async def _fetch_finmind_txf_daily(self, days: int = 240) -> List[Dict[str, Any]]:
+        """
+        從 FinMind TaiwanFuturesDaily (TX) 抓取台指期近月「全盤 (夜盤+日盤)」真實日 K 歷史資料，
+        使其與券商軟體「台指近全」日 K / 週 K 完全一致。
+        """
+        client = await self._get_client()
+        start_date = (datetime.now(TAIPEI_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+        url = "https://api.finmindtrade.com/api/v4/data"
+        params = {
+            "dataset": "TaiwanFuturesDaily",
+            "data_id": "TX",
+            "start_date": start_date,
+        }
+        try:
+            resp = await client.get(url, params=params, headers=self._random_headers())
+            if resp.status_code != 200:
+                return []
+            raw = resp.json().get("data", [])
+            rows = [
+                r for r in raw
+                if "/" not in str(r.get("contract_date", ""))
+                and float(r.get("open", 0)) > 0
+                and float(r.get("volume", 0)) > 100
+            ]
+            if not rows:
+                return []
+
+            by_date: Dict[str, List[Dict[str, Any]]] = {}
+            for r in rows:
+                by_date.setdefault(r["date"], []).append(r)
+
+            candles: List[Dict[str, Any]] = []
+            for d_str in sorted(by_date.keys()):
+                items = by_date[d_str]
+                # 挑選當日成交量最大的單月合約（近月主力合約）
+                by_contract: Dict[str, Dict[str, Any]] = {}
+                vol_by_contract: Dict[str, float] = {}
+                for it in items:
+                    c_id = it["contract_date"]
+                    vol_by_contract[c_id] = vol_by_contract.get(c_id, 0.0) + float(it.get("volume", 0))
+                    by_contract.setdefault(c_id, {})[it.get("trading_session", "position")] = it
+
+                main_contract = max(vol_by_contract.keys(), key=lambda k: vol_by_contract[k])
+                sess = by_contract[main_contract]
+                am = sess.get("after_market")
+                pm = sess.get("position")
+
+                if am and pm:
+                    o = float(am["open"])
+                    h = max(float(am["max"]), float(pm["max"]))
+                    l = min(float(am["min"]), float(pm["min"]))
+                    cl = float(pm["close"])
+                elif pm:
+                    o, h, l, cl = float(pm["open"]), float(pm["max"]), float(pm["min"]), float(pm["close"])
+                elif am:
+                    o, h, l, cl = float(am["open"]), float(am["max"]), float(am["min"]), float(am["close"])
+                else:
+                    continue
+
+                dt = datetime.strptime(d_str, "%Y-%m-%d").replace(hour=9, minute=0, tzinfo=TAIPEI_TZ)
+                candles.append({
+                    "timestamp": int(dt.timestamp()),
+                    "open": round(o, 2),
+                    "high": round(h, 2),
+                    "low": round(l, 2),
+                    "close": round(cl, 2),
+                })
+            return candles
+        except Exception as exc:
+            logger.warning(f"FinMind TXF 日K抓取失敗: {exc}")
+            return []
+
     @staticmethod
     def _parse_yahoo_candles(chart_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         """將 Yahoo Chart JSON 解析為乾淨的 OHLC K 線列表"""
@@ -524,12 +596,13 @@ class TaiexMarketService:
                 base_candles[macro_tf] = self._resample_candles(base_candles["1d"], macro_tf)
                 logger.info(f"時框 {macro_tf} 合成完成，共 {len(base_candles[macro_tf])} 根")
 
-        # 並行抓取 TWSE MIS (^TWII 今日官方報價) 與 TAIFEX MIS (TXFF 近月報價)
+        # 並行抓取 TWSE MIS (^TWII 今日官方報價)、TAIFEX MIS (TXFF 近月報價) 與 FinMind TXF 全盤日 K
         now = datetime.now(TAIPEI_TZ)
         txf_open, market_type = is_taifex_market_open(now)
         twse_task = self._fetch_twse_mis_quote()
         txf_task = self._fetch_taifex_txf_quote(market_type)
-        twse_quote, txf_quote = await asyncio.gather(twse_task, txf_task)
+        txf_daily_task = self._fetch_finmind_txf_daily(days=240)
+        twse_quote, txf_quote, txf_daily_candles = await asyncio.gather(twse_task, txf_task, txf_daily_task)
 
         if not txf_quote:
             other_mt = "0" if market_type == "1" else "1"
@@ -549,6 +622,12 @@ class TaiexMarketService:
         async with self._lock:
             self.candles_by_target["TXFF"] = copy.deepcopy(base_candles)
             self.candles_by_target["TWII"] = copy.deepcopy(base_candles)
+
+            # 若取得 FinMind 真實台指近全 (夜盤+日盤) 日 K，優先覆寫 TXFF 的日 K 與週 K
+            if txf_daily_candles:
+                self.candles_by_target["TXFF"]["1d"] = txf_daily_candles
+                self.candles_by_target["TXFF"]["1wk"] = self._resample_candles(txf_daily_candles, "1wk")
+                logger.info(f"TXFF 全盤日K載入完成：{len(txf_daily_candles)} 根，週K：{len(self.candles_by_target['TXFF']['1wk'])} 根")
 
             # 將 TXFF 真實日/夜盤 1分K 重採樣併入 TXFF 的 5m / 15m / 30m / 60m
             if txf_1m_candles:

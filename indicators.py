@@ -258,9 +258,9 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
             bear_stop_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
             bull_stop_low = None
         elif idx >= 4:
-            # 檢查該根是否為局部 15 根波段底部轉陽或頂部轉陰型態
-            sub = candles[max(0, idx - 14) : idx + 1]
-            sig = _detect_reversal_at_tip(sub, {"value": None}, 1.0, 0.0)
+            # 檢查該根是否為經第2根收紅/收黑確認的轉陽/轉陰訊號
+            sub = candles[max(0, idx - 15) : idx + 1]
+            sig = _detect_confirmed_reversal_at_tip(sub)
             if sig["signal"] == "bull_reversal":
                 wave_state = 1
                 bull_stop_low = c["low"]
@@ -452,6 +452,39 @@ def _detect_reversal_at_tip(
     return {"signal": "none", "pattern": None, "zone": "top", "is_taiji": False}
 
 
+def _detect_confirmed_reversal_at_tip(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    依《太極陰陽學》「1. 型態確認」第 2 根確認規則：
+    - 轉陽確認：前一根為底部型態，且當根（第 2 根）必須【收紅】且【收漲】；或當根與前一根構成底部【連2陽K】。
+    - 轉陰確認：前一根為頭部型態，且當根（第 2 根）必須【收黑】且【收跌】；或當根與前一根構成頂部【連2陰K】。
+    """
+    if len(candles) < 2:
+        return {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False}
+
+    c_prev = candles[-2]
+    c_curr = candles[-1]
+
+    # 先檢查前一根是否出現單根/組合反轉型態，再由當根(第2根)收紅/收黑確認
+    prev_sig = _detect_reversal_at_tip(candles[:-1], {"value": None}, 1.0, 0.0)
+    if prev_sig["signal"] == "bull_reversal":
+        if c_curr["close"] > c_curr["open"] and c_curr["close"] > c_prev["close"]:
+            return prev_sig
+    elif prev_sig["signal"] == "bear_reversal":
+        if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
+            return prev_sig
+
+    # 亦支援在當根剛完成 連2陽K / 連2陰K / 多頭吞噬 / 空頭吞噬 / 貫穿 / 烏雲罩日（本身第2根已收紅收漲或收黑收跌）
+    curr_sig = _detect_reversal_at_tip(candles, {"value": None}, 1.0, 0.0)
+    if curr_sig["signal"] == "bull_reversal" and curr_sig["pattern"] in ("連2陽K", "多頭吞噬", "多頭貫穿", "多頭島型反轉"):
+        if c_curr["close"] > c_curr["open"] and c_curr["close"] > c_prev["close"]:
+            return curr_sig
+    elif curr_sig["signal"] == "bear_reversal" and curr_sig["pattern"] in ("連2陰K", "空頭吞噬", "烏雲罩日", "空頭島型反轉"):
+        if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
+            return curr_sig
+
+    return {"signal": "none", "pattern": None, "zone": curr_sig.get("zone", "mid"), "is_taiji": False}
+
+
 def _is_candle_completed(candle_ts: int, tf_key: str, now_ts: Optional[int] = None) -> bool:
     """判斷最新一根 K 線是否已經收線完成（未完成則不參與反轉型態亮燈判定）"""
     now_dt = datetime.fromtimestamp(now_ts, tz=TAIPEI_TZ) if now_ts else datetime.now(TAIPEI_TZ)
@@ -505,9 +538,7 @@ def detect_reversal_signal(
 
     for offset in range(0, max_offset + 1):
         sub = eval_candles[: len(eval_candles) - offset]
-        tip_price = sub[-1]["close"]
-        sub_ratio = calculate_price_ratio(tip_price, swing_high, swing_low) if (offset > 0 or len(eval_candles) < len(candles)) else ratio_info
-        sig = _detect_reversal_at_tip(sub, sub_ratio, swing_high, swing_low)
+        sig = _detect_confirmed_reversal_at_tip(sub)
         if sig["signal"] != "none":
             hits.append({**sig, "offset": offset})
 
@@ -627,9 +658,9 @@ def evaluate_all_timeframes(
         last_marker_sig = "none"
         for abs_idx in range(vis_start, len(confirmed_candles)):
             sub = confirmed_candles[: abs_idx + 1]
-            sig = _detect_reversal_at_tip(sub, {"value": None}, 1.0, 0.0)
+            sig = _detect_confirmed_reversal_at_tip(sub)
             if sig["signal"] in ("bull_reversal", "bear_reversal"):
-                # 同一波轉向只標示首次轉折點，避免連續多根重複疊字
+                # 同一波轉向只標示首次確認點，避免連續多根重複疊字
                 if sig["signal"] != last_marker_sig:
                     chart_markers.append({
                         "vis_idx": abs_idx - vis_start,

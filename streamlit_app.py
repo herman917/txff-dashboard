@@ -14,7 +14,7 @@ from crawler import TaiexMarketService
 from indicators import evaluate_all_timeframes, evaluate_taiji_resonance
 
 st.set_page_config(
-    page_title="台指期 / 大盤即時多空力道",
+    page_title="台股陰陽轉折",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed",

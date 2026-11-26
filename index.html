@@ -150,12 +150,18 @@
     </main>
 
     <!-- 底部說明 -->
-    <footer class="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 px-1">
+    <footer class="text-xs text-slate-300 bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-1">
       <div>
-        資料來源：<span id="data-source">--</span> ｜ 十字線（收=開）自動延續前一根 K 線顏色狀態
+        <span class="font-semibold text-slate-100">資料來源：</span><span id="data-source">--</span> ｜ <span class="font-semibold text-slate-100">陰陽狀態：</span>太極波段延續（轉陽後維持【陽】、轉陰後維持【陰】，單根反彈/回檔不改趨勢）。
       </div>
-      <div id="market-hours-note">
-        台指期交易時段：日盤 08:45 ~ 13:45 ｜ 夜盤 15:00 ~ 05:00（非盤中自動切換快取狀態）
+      <div class="text-rose-300">
+        <b>▲轉陽亮紅燈：</b>近15K已下跌一段且觸底(&le;25%)、未反彈過半(&le;55%)出現轉陽型態（連2陽K/鎚子/吞噬/貫穿/島型反轉/破底翻）。
+      </div>
+      <div class="text-emerald-300">
+        <b>▼轉陰亮綠燈：</b>近15K已上漲一段且觸頂(&ge;75%)、未跌破中軸(&ge;45%)出現轉陰型態（連2陰K/流星/吊人/吞噬/烏雲罩日/島型反轉）。
+      </div>
+      <div id="market-hours-note" class="text-slate-400">
+        ※ 所有指標皆須等 K 線收線完成才確認；亮燈保留 6T 或至波浪觸及對向極值為止。
       </div>
     </footer>
   </div>

@@ -441,7 +441,15 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
         rows_html.append(row_str)
 
     st.markdown(f'<div class="matrix-card">{"".join(rows_html)}</div>', unsafe_allow_html=True)
-    st.caption(f"資料來源：{quote['source']} ｜ 紅燈=底部轉陽 / 綠燈=高檔轉陰（已收線確認）")
+    st.markdown(
+        f"""<div style="margin-top:10px;padding:10px 14px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;font-size:12.5px;line-height:1.6;color:#cbd5e1;">
+<div><b style="color:#f8fafc;">資料來源：</b>{quote['source']} ｜ <b style="color:#f8fafc;">陰陽狀態：</b>太極波段延續（轉陽後維持【陽】、轉陰後維持【陰】，單根反彈/回檔不改趨勢）。</div>
+<div><b style="color:#fda4af;">▲轉陽亮紅燈：</b>近15K已下跌一段且觸底(&le;25%)、未反彈過半(&le;55%)出現轉陽型態（連2陽K/鎚子/吞噬/貫穿/島型反轉/破底翻）。</div>
+<div><b style="color:#6ee7b7;">▼轉陰亮綠燈：</b>近15K已上漲一段且觸頂(&ge;75%)、未跌破中軸(&ge;45%)出現轉陰型態（連2陰K/流星/吊人/吞噬/烏雲罩日/島型反轉）。</div>
+<div style="color:#94a3b8;font-size:12px;">※ 所有指標皆須等 K 線收線完成才確認；亮燈保留 6T 或至波浪觸及對向極值為止。</div>
+</div>""",
+        unsafe_allow_html=True,
+    )
 
 
 render_live_board(target_choice, stock_code_input, force_clicked)

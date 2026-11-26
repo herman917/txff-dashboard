@@ -224,11 +224,14 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
         if col != 0:
             prev_color = col
 
-    # 狀態機遞推：一旦進入 陽(+1) 或 陰(-1)，維持該波段狀態直到出現連2反向K線或局部高低點反轉
+    # 狀態機遞推：一旦進入 陽(+1) 或 陰(-1)，維持該波段狀態直到出現連2反向K線、局部反轉，或跌破轉陽低點/突破轉陰高點（型態失效）
     wave_state = 0
     consec_bull = 0
     consec_bear = 0
+    bull_stop_low: Optional[float] = None
+    bear_stop_high: Optional[float] = None
     for idx, col in enumerate(states):
+        c = candles[idx]
         if col == 1:
             consec_bull += 1
             consec_bear = 0
@@ -236,18 +239,36 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
             consec_bear += 1
             consec_bull = 0
 
+        # 依《太極陰陽學》停損/失效規則：跌破轉陽K線最低價 -> 轉陽失效轉為陰；突破轉陰K線最高價 -> 轉陰失效轉為陽
+        if wave_state == 1 and bull_stop_low is not None and c["close"] < bull_stop_low:
+            wave_state = -1
+            bull_stop_low = None
+            bear_stop_high = c["high"]
+        elif wave_state == -1 and bear_stop_high is not None and c["close"] > bear_stop_high:
+            wave_state = 1
+            bear_stop_high = None
+            bull_stop_low = c["low"]
+
         if consec_bull >= 2:
             wave_state = 1
+            bull_stop_low = min(candles[idx - 1]["low"], c["low"]) if idx >= 1 else c["low"]
+            bear_stop_high = None
         elif consec_bear >= 2:
             wave_state = -1
+            bear_stop_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
+            bull_stop_low = None
         elif idx >= 4:
             # 檢查該根是否為局部 15 根波段底部轉陽或頂部轉陰型態
             sub = candles[max(0, idx - 14) : idx + 1]
             sig = _detect_reversal_at_tip(sub, {"value": None}, 1.0, 0.0)
             if sig["signal"] == "bull_reversal":
                 wave_state = 1
+                bull_stop_low = c["low"]
+                bear_stop_high = None
             elif sig["signal"] == "bear_reversal":
                 wave_state = -1
+                bear_stop_high = c["high"]
+                bull_stop_low = None
 
     latest_color = states[-1]
     if latest_color == 0 and wave_state == 0:

@@ -194,15 +194,11 @@ def calculate_price_ratio(
 
 def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    多空陰陽狀態判定：
-    - 收盤 > 開盤：紅 K (+1)
-    - 收盤 < 開盤：黑 K (-1)
-    - 收盤 == 開盤（十字線）：延續前一根 K 線顏色狀態
-
-    判定規則：
-    - 連續 2 根以上紅 K (>= +2)：【陽】
-    - 連續 2 根以上黑 K (<= -2)：【陰】
-    - 僅 1 根紅 K 或 1 根黑 K (+1 / -1)：【盤整】
+    太極陰陽狀態機判定（單點起漲/起跌後延續，直到反向轉折訊號出現）：
+    - 收盤 > 開盤：紅 K (+1)；收盤 < 開盤：黑 K (-1)；十字線延續前一根顏色。
+    - 連續 2 根以上紅 K (>= +2) 或底部反轉訊號 -> 轉為【陽】(+1)，並維持在陽直到出現轉陰訊號。
+    - 連續 2 根以上黑 K (>= -2) 或頂部反轉訊號 -> 轉為【陰】(-1)，並維持在陰直到出現轉陽訊號。
+    - 即使下跌波段中出現單根紅 K 反彈（未達連 2 紅），只要尚未轉陽，狀態仍維持在【陰】。
     """
     if not candles:
         return {
@@ -215,23 +211,46 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # 先由舊到新計算每根 K 線的等效顏色 (+1, -1, 0)
     states: List[int] = []
-    prev_state = 0
+    prev_color = 0
     for c in candles:
-        o = c["open"]
-        cl = c["close"]
+        o, cl = c["open"], c["close"]
         if cl > o:
-            state = 1
+            col = 1
         elif cl < o:
-            state = -1
+            col = -1
         else:
-            # 十字線延續前一根顏色
-            state = prev_state
-        states.append(state)
-        if state != 0:
-            prev_state = state
+            col = prev_color
+        states.append(col)
+        if col != 0:
+            prev_color = col
 
-    latest_state = states[-1]
-    if latest_state == 0:
+    # 狀態機遞推：一旦進入 陽(+1) 或 陰(-1)，維持該波段狀態直到出現連2反向K線或局部高低點反轉
+    wave_state = 0
+    consec_bull = 0
+    consec_bear = 0
+    for idx, col in enumerate(states):
+        if col == 1:
+            consec_bull += 1
+            consec_bear = 0
+        elif col == -1:
+            consec_bear += 1
+            consec_bull = 0
+
+        if consec_bull >= 2:
+            wave_state = 1
+        elif consec_bear >= 2:
+            wave_state = -1
+        elif idx >= 4:
+            # 檢查該根是否為局部 15 根波段底部轉陽或頂部轉陰型態
+            sub = candles[max(0, idx - 14) : idx + 1]
+            sig = _detect_reversal_at_tip(sub, {"value": None}, 1.0, 0.0)
+            if sig["signal"] == "bull_reversal":
+                wave_state = 1
+            elif sig["signal"] == "bear_reversal":
+                wave_state = -1
+
+    latest_color = states[-1]
+    if latest_color == 0 and wave_state == 0:
         return {
             "streak": 0,
             "abs_streak": 0,
@@ -240,31 +259,30 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "streak_label": "十字盤整",
         }
 
-    # 由最新一根 K 線往回計算連續同色根數
     count = 0
     for s in reversed(states):
-        if s == latest_state:
+        if s == latest_color and latest_color != 0:
             count += 1
         else:
             break
 
-    signed_streak = count if latest_state == 1 else -count
+    signed_streak = count if latest_color == 1 else -count
 
-    if signed_streak >= 2:
+    if wave_state == 1:
         status = "陽"
         direction = "bull"
-        streak_label = f"連 {count} 紅"
-    elif signed_streak <= -2:
+        streak_label = f"連 {count} 紅" if latest_color == 1 and count >= 2 else "在陽"
+    elif wave_state == -1:
         status = "陰"
         direction = "bear"
-        streak_label = f"連 {count} 黑"
+        streak_label = f"連 {count} 黑" if latest_color == -1 and count >= 2 else "在陰"
     else:
         status = "盤整"
         direction = "bull_weak" if signed_streak == 1 else "bear_weak"
         streak_label = "1 紅" if signed_streak == 1 else "1 黑"
 
     return {
-        "streak": signed_streak,
+        "streak": wave_state if wave_state != 0 else signed_streak,
         "abs_streak": count,
         "status": status,
         "direction": direction,

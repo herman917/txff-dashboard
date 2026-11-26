@@ -260,34 +260,29 @@ def _pattern_svg(pattern: str) -> str:
     return svgs.get(pattern, "")
 
 
-def _mini_kline_svg(mini_candles: list, status: str = "盤整") -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 220x96)，依陽/陰狀態變換外框亮紅/亮綠"""
+def _mini_kline_svg(mini_candles: list, reversal: dict = None) -> str:
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x104)，並在反轉 K 棒位置標示 ▲轉陽 / ▼轉陰"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
 
-    if status == "陽":
-        box_style = "background:#020617;border:1.5px solid #f43f5e;box-shadow:0 0 10px rgba(244,63,94,0.35);border-radius:8px;display:block;"
-    elif status == "陰":
-        box_style = "background:#020617;border:1.5px solid #10b981;box-shadow:0 0 10px rgba(16,185,129,0.35);border-radius:8px;display:block;"
-    else:
-        box_style = "background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;"
-
-    w, h = 220, 96
-    pad_y = 6
+    w, h = 220, 104
+    pad_top, pad_bot = 16, 16
     hi = max(c["h"] for c in mini_candles)
     lo = min(c["l"] for c in mini_candles)
     span = max(hi - lo, 0.01)
 
     def y_of(price: float) -> float:
-        return pad_y + (hi - price) / span * (h - 2 * pad_y)
+        return pad_top + (hi - price) / span * (h - pad_top - pad_bot)
 
     n = len(mini_candles)
     step = w / max(n, 1)
     bar_w = max(3.5, min(9.0, step * 0.65))
     elems = []
+    coords = []
     for i, c in enumerate(mini_candles):
         cx = i * step + step / 2.0
         yo, yh, yl, yc = y_of(c["o"]), y_of(c["h"]), y_of(c["l"]), y_of(c["c"])
+        coords.append((cx, yh, yl))
         col = "#f43f5e" if c["c"] > c["o"] else ("#10b981" if c["c"] < c["o"] else "#94a3b8")
         op = "0.55" if c.get("forming") else "1"
         body_top = min(yo, yc)
@@ -295,9 +290,40 @@ def _mini_kline_svg(mini_candles: list, status: str = "盤整") -> str:
         elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.3" opacity="{op}"/>')
         elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
 
+    # 在觸發反轉的該根已收線 K 棒位置標示 ▲轉陽 或 ▼轉陰
+    rev = reversal or {}
+    sig = rev.get("signal", "none")
+    if sig in ("bull_reversal", "bear_reversal"):
+        has_forming = 1 if mini_candles[-1].get("forming") else 0
+        bars_ago = int(rev.get("bars_ago", 0))
+        rev_idx = n - 1 - has_forming - bars_ago
+        if 0 <= rev_idx < n:
+            rx, ryh, ryl = coords[rev_idx]
+            tx = max(22.0, min(w - 22.0, rx))
+            if sig == "bull_reversal":
+                ly = min(h - 3.0, ryl + 12.0)
+                elems.append(
+                    f'<line x1="{rx:.1f}" y1="{pad_top - 4}" x2="{rx:.1f}" y2="{h - pad_bot + 2}" '
+                    f'stroke="rgba(244,63,94,0.35)" stroke-width="1" stroke-dasharray="2,2"/>'
+                )
+                elems.append(
+                    f'<text x="{tx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#fda4af" '
+                    f'font-size="9.5" font-weight="800">▲轉陽</text>'
+                )
+            else:
+                ly = max(10.0, ryh - 4.0)
+                elems.append(
+                    f'<line x1="{rx:.1f}" y1="{pad_top - 2}" x2="{rx:.1f}" y2="{h - pad_bot + 4}" '
+                    f'stroke="rgba(16,185,129,0.35)" stroke-width="1" stroke-dasharray="2,2"/>'
+                )
+                elems.append(
+                    f'<text x="{tx:.1f}" y="{ly:.1f}" text-anchor="middle" fill="#6ee7b7" '
+                    f'font-size="9.5" font-weight="800">▼轉陰</text>'
+                )
+
     return (
-        f'<svg width="100%" height="96" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
-        f'style="{box_style}">'
+        f'<svg width="100%" height="104" viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
+        f'style="background:#020617;border:1px solid #1e293b;border-radius:8px;display:block;">'
         f'{"".join(elems)}</svg>'
     )
 
@@ -398,7 +424,7 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
             rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{pat_label}</span></div>'
 
-        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], st_info["status"])
+        mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], rev)
 
         row_str = (
             f'<div class="tf-row tabular">'

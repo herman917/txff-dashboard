@@ -464,22 +464,30 @@ def _detect_confirmed_reversal_at_tip(candles: List[Dict[str, Any]]) -> Dict[str
     c_prev = candles[-2]
     c_curr = candles[-1]
 
-    # 先檢查前一根是否出現單根/組合反轉型態，再由當根(第2根)收紅/收黑確認
+    # 依十字線延續前一根顏色規則：若當根收盤==開盤且前一根收紅/收黑，視為延續紅K/黑K
+    is_curr_bull = (c_curr["close"] > c_curr["open"]) or (
+        c_curr["close"] == c_curr["open"] and c_prev["close"] > c_prev["open"]
+    )
+    is_curr_bear = (c_curr["close"] < c_curr["open"]) or (
+        c_curr["close"] == c_curr["open"] and c_prev["close"] < c_prev["open"]
+    )
+
+    # 先檢查前一根是否出現單根/組合反轉型態，再由當根(第2根)收紅/收黑（含一字/十字延續）確認
     prev_sig = _detect_reversal_at_tip(candles[:-1], {"value": None}, 1.0, 0.0)
     if prev_sig["signal"] == "bull_reversal":
-        if c_curr["close"] > c_curr["open"] and c_curr["close"] > c_prev["close"]:
+        if is_curr_bull and c_curr["close"] > c_prev["close"]:
             return prev_sig
     elif prev_sig["signal"] == "bear_reversal":
-        if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
+        if is_curr_bear and c_curr["close"] < c_prev["close"]:
             return prev_sig
 
     # 只有「連2陽K / 連2陰K」本身就是第2根收紅/收黑；其餘單根或兩根型態皆須等「下一根」收紅收漲/收黑收跌才算確認
     curr_sig = _detect_reversal_at_tip(candles, {"value": None}, 1.0, 0.0)
     if curr_sig["signal"] == "bull_reversal" and curr_sig["pattern"] == "連2陽K":
-        if c_curr["close"] > c_curr["open"] and c_curr["close"] > c_prev["close"]:
+        if is_curr_bull and c_curr["close"] > c_prev["close"]:
             return curr_sig
     elif curr_sig["signal"] == "bear_reversal" and curr_sig["pattern"] == "連2陰K":
-        if c_curr["close"] < c_curr["open"] and c_curr["close"] < c_prev["close"]:
+        if is_curr_bear and c_curr["close"] < c_prev["close"]:
             return curr_sig
 
     return {"signal": "none", "pattern": None, "zone": curr_sig.get("zone", "mid"), "is_taiji": False}

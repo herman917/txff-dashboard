@@ -304,28 +304,51 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
     for m in markers:
         m_idx = m.get("vis_idx", -1)
         m_sig = m.get("signal")
+        is_inv = bool(m.get("invalidated", False))
         if 0 <= m_idx < n and m_sig in ("bull_reversal", "bear_reversal"):
             rx, _, _ = coords[m_idx]
             left_pct = max(8.0, min(92.0, (rx / w) * 100.0))
             if m_sig == "bull_reversal":
+                line_col = "rgba(244,63,94,0.25)" if is_inv else "rgba(244,63,94,0.55)"
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 4}" x2="{rx:.1f}" y2="{h - pad_bot + 2}" '
-                    f'stroke="rgba(244,63,94,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                    f'stroke="{line_col}" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
+                if is_inv:
+                    badge_style = (
+                        "font-size:11px;font-weight:700;color:rgba(253,164,175,0.8);"
+                        "background:rgba(2,6,23,0.75);border:1px dashed rgba(244,63,94,0.65);"
+                        "padding:0px 5px;border-radius:4px;"
+                    )
+                else:
+                    badge_style = (
+                        "font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;"
+                        "box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;"
+                    )
                 overlay_parts.append(
                     f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
-                    f'font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;'
-                    f'box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>'
+                    f'{badge_style}white-space:nowrap;pointer-events:none;">▲轉陽</div>'
                 )
             else:
+                line_col = "rgba(16,185,129,0.25)" if is_inv else "rgba(16,185,129,0.55)"
                 elems.append(
                     f'<line x1="{rx:.1f}" y1="{pad_top - 2}" x2="{rx:.1f}" y2="{h - pad_bot + 4}" '
-                    f'stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>'
+                    f'stroke="{line_col}" stroke-width="1.2" stroke-dasharray="2,2"/>'
                 )
+                if is_inv:
+                    badge_style = (
+                        "font-size:11px;font-weight:700;color:rgba(110,231,183,0.8);"
+                        "background:rgba(2,6,23,0.75);border:1px dashed rgba(16,185,129,0.65);"
+                        "padding:0px 5px;border-radius:4px;"
+                    )
+                else:
+                    badge_style = (
+                        "font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;"
+                        "box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;"
+                    )
                 overlay_parts.append(
                     f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
-                    f'font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;'
-                    f'box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>'
+                    f'{badge_style}white-space:nowrap;pointer-events:none;">▼轉陰</div>'
                 )
     overlay_html = "".join(overlay_parts)
 

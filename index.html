@@ -463,15 +463,24 @@
       let overlayHtml = '';
       markers.forEach(m => {
         const mIdx = m.vis_idx;
+        const isInv = Boolean(m.invalidated);
         if (mIdx >= 0 && mIdx < coords.length) {
           const [rx] = coords[mIdx];
           const leftPct = Math.max(8, Math.min(92, (rx / w) * 100));
           if (m.signal === 'bull_reversal') {
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="rgba(244,63,94,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml += `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
+            const lineCol = isInv ? 'rgba(244,63,94,0.25)' : 'rgba(244,63,94,0.55)';
+            const badgeStyle = isInv
+              ? 'font-size:11px;font-weight:700;color:rgba(253,164,175,0.8);background:rgba(2,6,23,0.75);border:1px dashed rgba(244,63,94,0.65);padding:0px 5px;border-radius:4px;'
+              : 'font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;';
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="${lineCol}" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml += `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);${badgeStyle}white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
           } else if (m.signal === 'bear_reversal') {
-            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="rgba(16,185,129,0.55)" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml += `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
+            const lineCol = isInv ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.55)';
+            const badgeStyle = isInv
+              ? 'font-size:11px;font-weight:700;color:rgba(110,231,183,0.8);background:rgba(2,6,23,0.75);border:1px dashed rgba(16,185,129,0.65);padding:0px 5px;border-radius:4px;'
+              : 'font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;';
+            elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="${lineCol}" stroke-width="1.2" stroke-dasharray="2,2"/>`);
+            overlayHtml += `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);${badgeStyle}white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
           }
         }
       });

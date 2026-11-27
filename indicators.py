@@ -670,14 +670,35 @@ def evaluate_all_timeframes(
             if sig["signal"] in ("bull_reversal", "bear_reversal"):
                 # 同一波轉向只標示首次確認點，避免連續多根重複疊字
                 if sig["signal"] != last_marker_sig:
+                    c_cur = confirmed_candles[abs_idx]
+                    c_prv = confirmed_candles[abs_idx - 1] if abs_idx >= 1 else c_cur
+                    if sig["signal"] == "bull_reversal":
+                        stop_price = min(c_prv["low"], c_cur["low"])
+                        is_inv = any(
+                            c["close"] < stop_price for c in confirmed_candles[abs_idx + 1 :]
+                        )
+                    else:
+                        stop_price = max(c_prv["high"], c_cur["high"])
+                        is_inv = any(
+                            c["close"] > stop_price for c in confirmed_candles[abs_idx + 1 :]
+                        )
                     chart_markers.append({
                         "vis_idx": abs_idx - vis_start,
                         "signal": sig["signal"],
                         "pattern": sig["pattern"],
+                        "invalidated": is_inv,
                     })
                     last_marker_sig = sig["signal"]
             elif sig["zone"] == "mid":
                 last_marker_sig = "none"
+
+        # 若後方已出現反向轉折標示，前置舊標示亦視為失效
+        for i_m in range(len(chart_markers) - 1):
+            if any(
+                chart_markers[j]["signal"] != chart_markers[i_m]["signal"]
+                for j in range(i_m + 1, len(chart_markers))
+            ):
+                chart_markers[i_m]["invalidated"] = True
 
         results.append({
             "timeframe": tf_key,

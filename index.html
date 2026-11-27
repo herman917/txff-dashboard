@@ -452,10 +452,10 @@
       });
 
       const markers = [...(chartMarkers || [])];
-      if (reversal && (reversal.signal === 'bull_reversal' || reversal.signal === 'bear_reversal')) {
+      if (markers.length === 0 && reversal && (reversal.signal === 'bull_reversal' || reversal.signal === 'bear_reversal')) {
         const hasForming = miniCandles[miniCandles.length - 1].forming ? 1 : 0;
         const revIdx = miniCandles.length - 1 - hasForming - (reversal.bars_ago || 0);
-        if (revIdx >= 0 && revIdx < coords.length && !markers.some(m => m.vis_idx === revIdx)) {
+        if (revIdx >= 0 && revIdx < coords.length) {
           markers.push({ vis_idx: revIdx, signal: reversal.signal });
         }
       }

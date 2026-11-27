@@ -290,14 +290,14 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
         elems.append(f'<line x1="{cx:.1f}" y1="{yh:.1f}" x2="{cx:.1f}" y2="{yl:.1f}" stroke="{col}" stroke-width="1.3" opacity="{op}"/>')
         elems.append(f'<rect x="{cx - bar_w/2:.1f}" y="{body_top:.1f}" width="{bar_w:.1f}" height="{body_h:.1f}" rx="0.8" fill="{col}" opacity="{op}"/>')
 
-    # 保留 K 線圖內所有 ▲轉陽 / ▼轉陰 轉折標誌
+    # 保留 K 線圖內所有 ▲轉陽 / ▼轉陰 轉折標誌（僅在無狀態機標誌時以 reversal 補位）
     markers = list(chart_markers or [])
     rev = reversal or {}
     sig = rev.get("signal", "none")
-    if sig in ("bull_reversal", "bear_reversal"):
+    if not markers and sig in ("bull_reversal", "bear_reversal"):
         has_forming = 1 if mini_candles[-1].get("forming") else 0
         rev_idx = n - 1 - has_forming - int(rev.get("bars_ago", 0))
-        if 0 <= rev_idx < n and not any(m.get("vis_idx") == rev_idx for m in markers):
+        if 0 <= rev_idx < n:
             markers.append({"vis_idx": rev_idx, "signal": sig})
 
     overlay_parts = []

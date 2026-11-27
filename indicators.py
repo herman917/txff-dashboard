@@ -192,6 +192,97 @@ def calculate_price_ratio(
     }
 
 
+def _run_wave_state_machine(
+    candles: List[Dict[str, Any]],
+) -> Tuple[List[int], int, List[Dict[str, Any]]]:
+    """
+    執行太極陰陽波段狀態機，回傳 (每根等效顏色, 最終 wave_state, 狀態切換事件列表)。
+    每筆切換事件包含 {"abs_idx": int, "signal": "bull_reversal" | "bear_reversal", "pattern": str}。
+    """
+    states: List[int] = []
+    prev_color = 0
+    for c in candles:
+        o, cl = c["open"], c["close"]
+        if cl > o:
+            col = 1
+        elif cl < o:
+            col = -1
+        else:
+            col = prev_color
+        states.append(col)
+        if col != 0:
+            prev_color = col
+
+    wave_state = 0
+    consec_bull = 0
+    consec_bear = 0
+    bull_stop_low: Optional[float] = None
+    bear_stop_high: Optional[float] = None
+    transitions: List[Dict[str, Any]] = []
+
+    for idx, col in enumerate(states):
+        c = candles[idx]
+        if col == 1:
+            consec_bull += 1
+            consec_bear = 0
+        elif col == -1:
+            consec_bear += 1
+            consec_bull = 0
+
+        prev_wave = wave_state
+        pattern: Optional[str] = None
+
+        # 依《太極陰陽學》停損/失效規則：跌破轉陽K線最低價 -> 轉陽失效轉為陰；突破轉陰K線最高價 -> 轉陰失效轉為陽
+        if wave_state == 1 and bull_stop_low is not None and c["close"] < bull_stop_low:
+            wave_state = -1
+            bull_stop_low = None
+            bear_stop_high = c["high"]
+            pattern = "跌破轉陽低點"
+        elif wave_state == -1 and bear_stop_high is not None and c["close"] > bear_stop_high:
+            wave_state = 1
+            bear_stop_high = None
+            bull_stop_low = c["low"]
+            pattern = "突破轉陰高點"
+
+        if consec_bull >= 2:
+            wave_state = 1
+            bull_stop_low = min(candles[idx - 1]["low"], c["low"]) if idx >= 1 else c["low"]
+            bear_stop_high = None
+            if prev_wave != 1:
+                pattern = "連2陽K"
+        elif consec_bear >= 2:
+            wave_state = -1
+            bear_stop_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
+            bull_stop_low = None
+            if prev_wave != -1:
+                pattern = "連2陰K"
+        elif idx >= 4:
+            # 檢查該根是否為經第2根收紅/收黑確認的轉陽/轉陰訊號
+            sub = candles[max(0, idx - 15) : idx + 1]
+            sig = _detect_confirmed_reversal_at_tip(sub)
+            if sig["signal"] == "bull_reversal":
+                wave_state = 1
+                bull_stop_low = c["low"]
+                bear_stop_high = None
+                if prev_wave != 1:
+                    pattern = sig["pattern"]
+            elif sig["signal"] == "bear_reversal":
+                wave_state = -1
+                bear_stop_high = c["high"]
+                bull_stop_low = None
+                if prev_wave != -1:
+                    pattern = sig["pattern"]
+
+        if wave_state != prev_wave and wave_state != 0:
+            transitions.append({
+                "abs_idx": idx,
+                "signal": "bull_reversal" if wave_state == 1 else "bear_reversal",
+                "pattern": pattern or ("連2陽K" if wave_state == 1 else "連2陰K"),
+            })
+
+    return states, wave_state, transitions
+
+
 def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     太極陰陽狀態機判定（單點起漲/起跌後延續，直到反向轉折訊號出現）：
@@ -209,66 +300,7 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "streak_label": "無資料",
         }
 
-    # 先由舊到新計算每根 K 線的等效顏色 (+1, -1, 0)
-    states: List[int] = []
-    prev_color = 0
-    for c in candles:
-        o, cl = c["open"], c["close"]
-        if cl > o:
-            col = 1
-        elif cl < o:
-            col = -1
-        else:
-            col = prev_color
-        states.append(col)
-        if col != 0:
-            prev_color = col
-
-    # 狀態機遞推：一旦進入 陽(+1) 或 陰(-1)，維持該波段狀態直到出現連2反向K線、局部反轉，或跌破轉陽低點/突破轉陰高點（型態失效）
-    wave_state = 0
-    consec_bull = 0
-    consec_bear = 0
-    bull_stop_low: Optional[float] = None
-    bear_stop_high: Optional[float] = None
-    for idx, col in enumerate(states):
-        c = candles[idx]
-        if col == 1:
-            consec_bull += 1
-            consec_bear = 0
-        elif col == -1:
-            consec_bear += 1
-            consec_bull = 0
-
-        # 依《太極陰陽學》停損/失效規則：跌破轉陽K線最低價 -> 轉陽失效轉為陰；突破轉陰K線最高價 -> 轉陰失效轉為陽
-        if wave_state == 1 and bull_stop_low is not None and c["close"] < bull_stop_low:
-            wave_state = -1
-            bull_stop_low = None
-            bear_stop_high = c["high"]
-        elif wave_state == -1 and bear_stop_high is not None and c["close"] > bear_stop_high:
-            wave_state = 1
-            bear_stop_high = None
-            bull_stop_low = c["low"]
-
-        if consec_bull >= 2:
-            wave_state = 1
-            bull_stop_low = min(candles[idx - 1]["low"], c["low"]) if idx >= 1 else c["low"]
-            bear_stop_high = None
-        elif consec_bear >= 2:
-            wave_state = -1
-            bear_stop_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
-            bull_stop_low = None
-        elif idx >= 4:
-            # 檢查該根是否為經第2根收紅/收黑確認的轉陽/轉陰訊號
-            sub = candles[max(0, idx - 15) : idx + 1]
-            sig = _detect_confirmed_reversal_at_tip(sub)
-            if sig["signal"] == "bull_reversal":
-                wave_state = 1
-                bull_stop_low = c["low"]
-                bear_stop_high = None
-            elif sig["signal"] == "bear_reversal":
-                wave_state = -1
-                bear_stop_high = c["high"]
-                bull_stop_low = None
+    states, wave_state, _ = _run_wave_state_machine(candles)
 
     latest_color = states[-1]
     if latest_color == 0 and wave_state == 0:
@@ -662,43 +694,19 @@ def evaluate_all_timeframes(
             lc = candles[-1]
             mini_candles.append({"o": lc["open"], "h": lc["high"], "l": lc["low"], "c": lc["close"], "forming": True})
 
-        chart_markers: List[Dict[str, Any]] = []
-        last_marker_sig = "none"
-        for abs_idx in range(vis_start, len(confirmed_candles)):
-            sub = confirmed_candles[: abs_idx + 1]
-            sig = _detect_confirmed_reversal_at_tip(sub)
-            if sig["signal"] in ("bull_reversal", "bear_reversal"):
-                # 同一波轉向只標示首次確認點，避免連續多根重複疊字
-                if sig["signal"] != last_marker_sig:
-                    c_cur = confirmed_candles[abs_idx]
-                    c_prv = confirmed_candles[abs_idx - 1] if abs_idx >= 1 else c_cur
-                    if sig["signal"] == "bull_reversal":
-                        stop_price = min(c_prv["low"], c_cur["low"])
-                        is_inv = any(
-                            c["close"] < stop_price for c in confirmed_candles[abs_idx + 1 :]
-                        )
-                    else:
-                        stop_price = max(c_prv["high"], c_cur["high"])
-                        is_inv = any(
-                            c["close"] > stop_price for c in confirmed_candles[abs_idx + 1 :]
-                        )
-                    chart_markers.append({
-                        "vis_idx": abs_idx - vis_start,
-                        "signal": sig["signal"],
-                        "pattern": sig["pattern"],
-                        "invalidated": is_inv,
-                    })
-                    last_marker_sig = sig["signal"]
-            elif sig["zone"] == "mid":
-                last_marker_sig = "none"
-
-        # 若後方已出現反向轉折標示，前置舊標示亦視為失效
-        for i_m in range(len(chart_markers) - 1):
-            if any(
-                chart_markers[j]["signal"] != chart_markers[i_m]["signal"]
-                for j in range(i_m + 1, len(chart_markers))
-            ):
-                chart_markers[i_m]["invalidated"] = True
+        # 與太極陰陽狀態機完全同步：僅在狀態機切換（陰→陽 / 陽→陰）時標示，
+        # 後續已被反向切換覆蓋的舊標示一律設為 invalidated=True（虛線外框），確保與上方狀態標籤 100% 一致
+        _, _, transitions = _run_wave_state_machine(confirmed_candles)
+        chart_markers: List[Dict[str, Any]] = [
+            {
+                "vis_idx": tr["abs_idx"] - vis_start,
+                "signal": tr["signal"],
+                "pattern": tr["pattern"],
+                "invalidated": (idx_tr < len(transitions) - 1),
+            }
+            for idx_tr, tr in enumerate(transitions)
+            if tr["abs_idx"] >= vis_start
+        ]
 
         results.append({
             "timeframe": tf_key,

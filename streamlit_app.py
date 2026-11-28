@@ -483,3 +483,10 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
 
 
 render_live_board(target_choice, stock_code_input, force_clicked)
+
+st.markdown(
+    '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #1e293b;font-size:12px;">'
+    '<a href="https://herman917.github.io/herman-home/" target="_blank" rel="noopener noreferrer" style="color:#38bdf8;text-decoration:none;">https://herman917.github.io/herman-home/</a>'
+    '</div>',
+    unsafe_allow_html=True,
+)

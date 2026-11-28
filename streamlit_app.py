@@ -219,13 +219,18 @@ stock_code_input = ""
 if target_choice == "STOCK":
     sc1, sc2 = st.columns([3, 1])
     with sc1:
-        stock_code_input = st.text_input(
-            "台股代號",
+        raw_input = st.text_input(
+            "台股代號或股名",
             value=st.session_state.get("stock_code", ""),
-            placeholder="輸入台股代號 (例: 2330、2317、0050)",
+            placeholder="輸入台股代號或股名 (例: 2330、台積電、定穎)",
             label_visibility="collapsed",
         ).strip()
-        if stock_code_input:
+        if raw_input:
+            resolved_code = run_async(service.resolve_stock_query(raw_input))
+            if resolved_code and resolved_code != raw_input:
+                st.session_state["stock_code"] = resolved_code
+                st.rerun()
+            stock_code_input = resolved_code or raw_input
             st.session_state["stock_code"] = stock_code_input
         else:
             st.session_state.pop("stock_code", None)
@@ -366,7 +371,7 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
 @st.fragment(run_every=timedelta(seconds=interval_sec))
 def render_live_board(target: str, stock_code: str, force: bool) -> None:
     if target == "STOCK" and not stock_code.strip():
-        st.info("請輸入台股代號（例如：2330、2317、0050）並按 Enter 或點擊「查詢個股」。")
+        st.info("請輸入台股代號或股名（例如：2330、台積電、定穎）並按 Enter 或點擊「查詢個股」。")
         return
 
     expected_key = f"STOCK:{stock_code.strip().upper()}" if target == "STOCK" else target

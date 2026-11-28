@@ -9,8 +9,10 @@
 
 import asyncio
 import copy
+import difflib
 import logging
 import random
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote as url_quote
@@ -173,6 +175,8 @@ class TaiexMarketService:
         self._lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None
         self._client_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._stock_directory: List[Tuple[str, str]] = []
+        self._directory_loaded_at: Optional[datetime] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         current_loop = asyncio.get_running_loop()
@@ -984,9 +988,95 @@ class TaiexMarketService:
                 )
                 self.quotes[active]["last_fetched_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
 
+    async def _ensure_stock_directory(self) -> List[Tuple[str, str]]:
+        """載入全市場上市(TWSE)與上櫃(TPEX)個股/ETF代號與名稱清單並快取 12 小時"""
+        now = datetime.now(TAIPEI_TZ)
+        if (
+            self._stock_directory
+            and self._directory_loaded_at
+            and (now - self._directory_loaded_at) < timedelta(hours=12)
+        ):
+            return self._stock_directory
+
+        entries: Dict[str, str] = {}
+        try:
+            async with httpx.AsyncClient(timeout=10.0, verify=False, headers=self._random_headers()) as cli:
+                r_twse, r_tpex = await asyncio.gather(
+                    cli.get("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"),
+                    cli.get("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"),
+                    return_exceptions=True,
+                )
+                if isinstance(r_twse, httpx.Response) and r_twse.status_code == 200:
+                    for row in r_twse.json():
+                        c = str(row.get("Code", "")).strip().upper()
+                        n = str(row.get("Name", "")).strip()
+                        if c and n:
+                            entries[c] = n
+                if isinstance(r_tpex, httpx.Response) and r_tpex.status_code == 200:
+                    for row in r_tpex.json():
+                        c = str(row.get("SecuritiesCompanyCode", "")).strip().upper()
+                        n = str(row.get("CompanyName", "")).strip()
+                        if c and n and c not in entries:
+                            entries[c] = n
+        except Exception as exc:
+            logger.warning("載入台股股名清單失敗: %s", exc)
+
+        if entries:
+            self._stock_directory = list(entries.items())
+            self._directory_loaded_at = now
+        return self._stock_directory
+
+    async def resolve_stock_query(self, query: str) -> str:
+        """若輸入為股名或部分名稱，比對全市場清單回傳最接近的 Top 1 台股代號；若已為代號則直接正規化回傳"""
+        raw = query.strip().upper().replace(".TW", "").replace(".TWO", "")
+        if not raw:
+            return ""
+        # 若為標準台股代號格式 (4~6碼數字，可帶1碼英文字尾如 00631L / 00937B)，直接回傳
+        if re.fullmatch(r"\d{4,6}[A-Z]?", raw):
+            return raw
+
+        directory = await self._ensure_stock_directory()
+        if directory:
+            q_norm = raw.replace(" ", "")
+            best_code = ""
+            best_score = -1.0
+            for code, name in directory:
+                n_norm = name.upper().replace(" ", "")
+                if n_norm == q_norm:
+                    score = 10000.0
+                elif n_norm.startswith(q_norm):
+                    score = 9000.0 - len(n_norm)
+                elif q_norm in n_norm:
+                    score = 8000.0 - n_norm.index(q_norm) * 50.0 - len(n_norm)
+                else:
+                    ratio = difflib.SequenceMatcher(None, q_norm, n_norm).ratio()
+                    if ratio < 0.35:
+                        continue
+                    score = ratio * 5000.0 - len(n_norm)
+                if score > best_score:
+                    best_score = score
+                    best_code = code
+            if best_code:
+                return best_code
+
+        # 備援：透過 Yahoo Finance Search API 搜尋台股 (.TW / .TWO)
+        try:
+            url = f"https://query1.finance.yahoo.com/v1/finance/search?q={url_quote(query.strip())}&quotesCount=10&newsCount=0"
+            async with httpx.AsyncClient(timeout=8.0, headers=self._random_headers()) as cli:
+                resp = await cli.get(url)
+                if resp.status_code == 200:
+                    for item in resp.json().get("quotes", []):
+                        sym = str(item.get("symbol", "")).upper()
+                        if sym.endswith(".TW") or sym.endswith(".TWO"):
+                            return sym.replace(".TW", "").replace(".TWO", "")
+        except Exception as exc:
+            logger.debug("Yahoo Search 股名解析失敗 (%s): %s", query, exc)
+
+        return raw
+
     async def ensure_stock_loaded(self, stock_code: str) -> str:
-        """載入指定台股代號（如 2330）的 15m/30m/60m/1d/1wk 歷史 K 線與報價，回傳 target_key"""
-        code = stock_code.strip().upper().replace(".TW", "").replace(".TWO", "")
+        """載入指定台股代號或股名（如 2330 或 台積電）的 15m/60m/1d/1wk 歷史 K 線與報價，回傳 target_key"""
+        code = await self.resolve_stock_query(stock_code)
         target_key = f"STOCK:{code}"
         if target_key in self.candles_by_target and self.candles_by_target[target_key].get("1d"):
             return target_key

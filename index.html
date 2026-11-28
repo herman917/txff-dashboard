@@ -56,7 +56,7 @@
                 </button>
               </div>
               <div class="inline-flex items-center gap-1">
-                <input id="stock-code-input" type="text" placeholder="台股代號 (例: 2330)" maxlength="10" onfocus="this.value=''"
+                <input id="stock-code-input" type="text" placeholder="代號或股名 (例: 2330/台積電)" maxlength="12" onfocus="this.value=''"
                   onkeydown="if(event.key==='Enter') queryStockCode()"
                   class="w-32 px-2 py-1 text-xs rounded-md bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
                 <button onclick="queryStockCode()"
@@ -227,6 +227,11 @@
         });
         if (res.ok) {
           const data = await res.json();
+          if (data.active_target && data.active_target.startsWith('STOCK:')) {
+            const resolvedCode = data.active_target.slice(6);
+            document.getElementById('stock-code-input').value = resolvedCode;
+            localStorage.setItem('txff_stock_code', resolvedCode);
+          }
           renderDashboard(data);
           countdownRemainingMs = refreshIntervalMs;
           lastTickTime = Date.now();

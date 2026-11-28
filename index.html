@@ -467,45 +467,27 @@
         }
       }
 
-      let lastMarkerPos = -1;
-      markers.forEach((mk, idxM) => {
-        if (mk.vis_idx >= 0 && mk.vis_idx < coords.length) lastMarkerPos = idxM;
-      });
-
       let overlayHtml = '';
-      markers.forEach((m, idxM) => {
+      markers.forEach(m => {
         const mIdx = m.vis_idx;
         const isInv = Boolean(m.invalidated);
-        const isLast = idxM === lastMarkerPos;
         if (mIdx >= 0 && mIdx < coords.length) {
           const [rx] = coords[mIdx];
-          const rawPct = Math.max(2, Math.min(98, (rx / w) * 100));
-          const leftPct = isLast ? rawPct : Math.max(8, Math.min(92, rawPct));
-          const txPct = isLast ? rawPct : 50;
-          const patName = (m.pattern || '').trim();
-          let patIcon = isLast && patName ? getPatternSvg(patName) : '';
-          if (patIcon) {
-            patIcon = patIcon.replace('width="32" height="22"', 'width="22" height="15" style="display:inline-block;vertical-align:middle;"');
-          }
-          const patShort = isLast && patName ? patName.replace(/多頭|空頭/g, '') : '';
-          const patExtra = isLast && (patIcon || patShort)
-            ? `<span style="display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding-left:4px;border-left:1px solid rgba(255,255,255,0.35);font-size:10.5px;font-weight:700;">${patIcon}${patShort}</span>`
-            : '';
-
+          const leftPct = Math.max(8, Math.min(92, (rx / w) * 100));
           if (m.signal === 'bull_reversal') {
             const lineCol = isInv ? 'rgba(244,63,94,0.25)' : 'rgba(244,63,94,0.55)';
             const badgeStyle = isInv
-              ? 'font-size:11px;font-weight:700;color:rgba(253,164,175,0.85);background:rgba(2,6,23,0.82);border:1px dashed rgba(244,63,94,0.65);padding:1px 5px;border-radius:4px;'
+              ? 'font-size:11px;font-weight:700;color:rgba(253,164,175,0.8);background:rgba(2,6,23,0.75);border:1px dashed rgba(244,63,94,0.65);padding:0px 5px;border-radius:4px;'
               : 'font-size:11.5px;font-weight:800;color:#ffffff;background:#e11d48;box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;';
             elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 4}" x2="${rx.toFixed(1)}" y2="${h - padBot + 2}" stroke="${lineCol}" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml += `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-${txPct.toFixed(1)}%);display:inline-flex;align-items:center;${badgeStyle}white-space:nowrap;pointer-events:none;">▲轉陽${patExtra}</div>`;
+            overlayHtml += `<div style="position:absolute;bottom:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);${badgeStyle}white-space:nowrap;pointer-events:none;">▲轉陽</div>`;
           } else if (m.signal === 'bear_reversal') {
             const lineCol = isInv ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.55)';
             const badgeStyle = isInv
-              ? 'font-size:11px;font-weight:700;color:rgba(110,231,183,0.85);background:rgba(2,6,23,0.82);border:1px dashed rgba(16,185,129,0.65);padding:1px 5px;border-radius:4px;'
+              ? 'font-size:11px;font-weight:700;color:rgba(110,231,183,0.8);background:rgba(2,6,23,0.75);border:1px dashed rgba(16,185,129,0.65);padding:0px 5px;border-radius:4px;'
               : 'font-size:11.5px;font-weight:800;color:#ffffff;background:#059669;box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;';
             elems.push(`<line x1="${rx.toFixed(1)}" y1="${padTop - 2}" x2="${rx.toFixed(1)}" y2="${h - padBot + 4}" stroke="${lineCol}" stroke-width="1.2" stroke-dasharray="2,2"/>`);
-            overlayHtml += `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-${txPct.toFixed(1)}%);display:inline-flex;align-items:center;${badgeStyle}white-space:nowrap;pointer-events:none;">▼轉陰${patExtra}</div>`;
+            overlayHtml += `<div style="position:absolute;top:2px;left:${leftPct.toFixed(1)}%;transform:translateX(-50%);${badgeStyle}white-space:nowrap;pointer-events:none;">▼轉陰</div>`;
           }
         }
       });
@@ -516,13 +498,17 @@
     function renderTimeframeRow(tf) {
       const { label, latest_candle, streak, reversal, mini_candles, chart_markers } = tf;
 
+      const activeMarker = [...(chart_markers || [])].reverse().find(m => !m.invalidated);
+      const dispSig = activeMarker ? activeMarker.signal : (reversal ? reversal.signal : 'none');
+      const dispPat = activeMarker ? activeMarker.pattern : (reversal ? reversal.pattern : '');
+
       let reversalHtml = '';
-      if (reversal && reversal.signal !== 'none') {
-        const patLabel = (reversal.pattern || '').replace(/多頭|空頭/g, '');
-        if (reversal.signal === 'bull_reversal') {
-          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${patLabel}</span></div>`;
-        } else if (reversal.signal === 'bear_reversal') {
-          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(reversal.pattern)}<span>${patLabel}</span></div>`;
+      if (dispSig && dispSig !== 'none' && dispPat) {
+        const patLabel = dispPat.replace(/多頭|空頭/g, '');
+        if (dispSig === 'bull_reversal') {
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-200 border border-rose-500/70 shadow-md shadow-rose-500/40 ring-1 ring-rose-400/70"><span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>${getPatternSvg(dispPat)}<span>${patLabel}</span></div>`;
+        } else if (dispSig === 'bear_reversal') {
+          reversalHtml = `<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/70 shadow-md shadow-emerald-500/40 ring-1 ring-emerald-400/70"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>${getPatternSvg(dispPat)}<span>${patLabel}</span></div>`;
         }
       }
 

@@ -309,30 +309,14 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
         if 0 <= rev_idx < n:
             markers.append({"vis_idx": rev_idx, "signal": sig})
 
-    # 找出最後一次轉陽 / 轉陰標誌索引，於 K 線圖內一併標示型態圖示與名稱
-    last_marker_pos = max(
-        (idx_m for idx_m, mk in enumerate(markers) if 0 <= mk.get("vis_idx", -1) < n),
-        default=-1,
-    )
-
     overlay_parts = []
-    for idx_m, m in enumerate(markers):
+    for m in markers:
         m_idx = m.get("vis_idx", -1)
         m_sig = m.get("signal")
         is_inv = bool(m.get("invalidated", False))
-        is_last = (idx_m == last_marker_pos)
         if 0 <= m_idx < n and m_sig in ("bull_reversal", "bear_reversal"):
             rx, _, _ = coords[m_idx]
-            raw_pct = max(2.0, min(98.0, (rx / w) * 100.0))
-            left_pct = raw_pct if is_last else max(8.0, min(92.0, raw_pct))
-            tx_pct = raw_pct if is_last else 50.0
-            pat_name = (m.get("pattern") or "").strip()
-            pat_icon = _pattern_svg(pat_name) if (is_last and pat_name) else ""
-            if pat_icon:
-                pat_icon = pat_icon.replace('width="32" height="22"', 'width="22" height="15" style="display:inline-block;vertical-align:middle;"')
-            pat_short = pat_name.replace("多頭", "").replace("空頭", "") if (is_last and pat_name) else ""
-            pat_extra = f'<span style="display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding-left:4px;border-left:1px solid rgba(255,255,255,0.35);font-size:10.5px;font-weight:700;">{pat_icon}{pat_short}</span>' if (is_last and (pat_icon or pat_short)) else ""
-
+            left_pct = max(8.0, min(92.0, (rx / w) * 100.0))
             if m_sig == "bull_reversal":
                 line_col = "rgba(244,63,94,0.25)" if is_inv else "rgba(244,63,94,0.55)"
                 elems.append(
@@ -341,9 +325,9 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
                 )
                 if is_inv:
                     badge_style = (
-                        "font-size:11px;font-weight:700;color:rgba(253,164,175,0.85);"
-                        "background:rgba(2,6,23,0.82);border:1px dashed rgba(244,63,94,0.65);"
-                        "padding:1px 5px;border-radius:4px;"
+                        "font-size:11px;font-weight:700;color:rgba(253,164,175,0.8);"
+                        "background:rgba(2,6,23,0.75);border:1px dashed rgba(244,63,94,0.65);"
+                        "padding:0px 5px;border-radius:4px;"
                     )
                 else:
                     badge_style = (
@@ -351,8 +335,8 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
                         "box-shadow:0 0 8px rgba(244,63,94,0.8);padding:1px 6px;border-radius:4px;"
                     )
                 overlay_parts.append(
-                    f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-{tx_pct:.1f}%);'
-                    f'display:inline-flex;align-items:center;{badge_style}white-space:nowrap;pointer-events:none;">▲轉陽{pat_extra}</div>'
+                    f'<div style="position:absolute;bottom:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
+                    f'{badge_style}white-space:nowrap;pointer-events:none;">▲轉陽</div>'
                 )
             else:
                 line_col = "rgba(16,185,129,0.25)" if is_inv else "rgba(16,185,129,0.55)"
@@ -362,9 +346,9 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
                 )
                 if is_inv:
                     badge_style = (
-                        "font-size:11px;font-weight:700;color:rgba(110,231,183,0.85);"
-                        "background:rgba(2,6,23,0.82);border:1px dashed rgba(16,185,129,0.65);"
-                        "padding:1px 5px;border-radius:4px;"
+                        "font-size:11px;font-weight:700;color:rgba(110,231,183,0.8);"
+                        "background:rgba(2,6,23,0.75);border:1px dashed rgba(16,185,129,0.65);"
+                        "padding:0px 5px;border-radius:4px;"
                     )
                 else:
                     badge_style = (
@@ -372,8 +356,8 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
                         "box-shadow:0 0 8px rgba(16,185,129,0.8);padding:1px 6px;border-radius:4px;"
                     )
                 overlay_parts.append(
-                    f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-{tx_pct:.1f}%);'
-                    f'display:inline-flex;align-items:center;{badge_style}white-space:nowrap;pointer-events:none;">▼轉陰{pat_extra}</div>'
+                    f'<div style="position:absolute;top:2px;left:{left_pct:.1f}%;transform:translateX(-50%);'
+                    f'{badge_style}white-space:nowrap;pointer-events:none;">▼轉陰</div>'
                 )
     overlay_html = "".join(overlay_parts)
 
@@ -475,15 +459,19 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
             badge = '<span class="badge-flat">盤整</span>'
             tf_color = "#ffffff"
 
+        markers_list = tf.get("chart_markers") or []
+        active_marker = next((m for m in reversed(markers_list) if not m.get("invalidated")), None)
         rev = tf.get("reversal") or {}
+        disp_sig = (active_marker or {}).get("signal") or rev.get("signal")
+        disp_pat = (active_marker or {}).get("pattern") or rev.get("pattern")
         rev_html = ""
-        if rev.get("signal") == "bull_reversal":
-            svg_icon = _pattern_svg(rev["pattern"])
-            pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
+        if disp_sig == "bull_reversal" and disp_pat:
+            svg_icon = _pattern_svg(disp_pat)
+            pat_label = disp_pat.replace("多頭", "").replace("空頭", "")
             rev_html = f'<div class="rev-bull rev-taiji-bull" style="margin-top:0;"><span class="dot-red"></span>{svg_icon}<span>{pat_label}</span></div>'
-        elif rev.get("signal") == "bear_reversal":
-            svg_icon = _pattern_svg(rev["pattern"])
-            pat_label = rev["pattern"].replace("多頭", "").replace("空頭", "")
+        elif disp_sig == "bear_reversal" and disp_pat:
+            svg_icon = _pattern_svg(disp_pat)
+            pat_label = disp_pat.replace("多頭", "").replace("空頭", "")
             rev_html = f'<div class="rev-bear rev-taiji-bear" style="margin-top:0;"><span class="dot-green"></span>{svg_icon}<span>{pat_label}</span></div>'
 
         mini_kline_html = _mini_kline_svg(tf.get("mini_candles") or [], rev, tf.get("chart_markers") or [])

@@ -13,10 +13,9 @@ from zoneinfo import ZoneInfo
 
 TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
-# 5 個時框設定（已移除 5分K 與 月K，由短到長排列）
+# 4 個時框設定（由短到長排列）
 TIMEFRAME_CONFIG: List[Dict[str, Any]] = [
     {"key": "15m", "label": "15分", "default_threshold": 0.004},  # 0.4%
-    {"key": "30m", "label": "30分", "default_threshold": 0.005},  # 0.5%
     {"key": "60m", "label": "時", "default_threshold": 0.008},    # 0.8%
     {"key": "1d", "label": "日", "default_threshold": 0.030},     # 3.0%
     {"key": "1wk", "label": "週", "default_threshold": 0.040},    # 4.0%
@@ -683,8 +682,8 @@ def evaluate_all_timeframes(
         has_forming = bool(candles and len(confirmed_candles) < len(candles))
         forming_color = _candle_color(candles[-1]) if has_forming else None
 
-        # 提供最近最多 18 根 K 線供前端繪製縮小 K 線走勢圖，並標出圖內所有轉陽 / 轉陰位置
-        vis_count = 17 if has_forming else 18
+        # 提供最近最多 28 根 K 線供前端繪製縮小 K 線走勢圖，並標出圖內所有轉陽 / 轉陰位置
+        vis_count = 27 if has_forming else 28
         vis_start = max(0, len(confirmed_candles) - vis_count)
         mini_candles = [
             {"o": c["open"], "h": c["high"], "l": c["low"], "c": c["close"], "forming": False}

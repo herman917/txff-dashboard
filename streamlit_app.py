@@ -215,18 +215,20 @@ with c2:
 with c3:
     force_clicked = st.button("立即更新", use_container_width=True)
 
-stock_code_input = "2330"
+stock_code_input = ""
 if target_choice == "STOCK":
     sc1, sc2 = st.columns([3, 1])
     with sc1:
         stock_code_input = st.text_input(
             "台股代號",
-            value=st.session_state.get("stock_code", "2330"),
+            value=st.session_state.get("stock_code", ""),
             placeholder="輸入台股代號 (例: 2330、2317、0050)",
             label_visibility="collapsed",
         ).strip()
         if stock_code_input:
             st.session_state["stock_code"] = stock_code_input
+        else:
+            st.session_state.pop("stock_code", None)
     with sc2:
         if st.button("查詢個股", use_container_width=True):
             force_clicked = True
@@ -261,11 +263,11 @@ def _pattern_svg(pattern: str) -> str:
 
 
 def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: list = None) -> str:
-    """繪製精簡縮小版 K 線走勢圖 (SVG 220x156)，保留圖內所有 ▲轉陽 / ▼轉陰 轉折標示"""
+    """繪製精簡縮小版 K 線走勢圖 (SVG 220x188)，保留圖內所有 ▲轉陽 / ▼轉陰 轉折標示"""
     if not mini_candles:
         return '<div style="font-size:12px;color:#64748b;">無 K 線資料</div>'
 
-    w, h = 220, 156
+    w, h = 220, 188
     pad_top, pad_bot = 18, 18
     hi = max(c["h"] for c in mini_candles)
     lo = min(c["l"] for c in mini_candles)
@@ -353,8 +355,8 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
     overlay_html = "".join(overlay_parts)
 
     return (
-        f'<div style="position:relative;width:100%;height:156px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
-        f'<svg width="100%" height="156" viewBox="0 0 {w} {h}" preserveAspectRatio="none" style="display:block;">'
+        f'<div style="position:relative;width:100%;height:188px;background:#020617;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">'
+        f'<svg width="100%" height="188" viewBox="0 0 {w} {h}" preserveAspectRatio="none" style="display:block;">'
         f'{"".join(elems)}</svg>'
         f'{overlay_html}'
         f'</div>'
@@ -363,6 +365,10 @@ def _mini_kline_svg(mini_candles: list, reversal: dict = None, chart_markers: li
 
 @st.fragment(run_every=timedelta(seconds=interval_sec))
 def render_live_board(target: str, stock_code: str, force: bool) -> None:
+    if target == "STOCK" and not stock_code.strip():
+        st.info("請輸入台股代號（例如：2330、2317、0050）並按 Enter 或點擊「查詢個股」。")
+        return
+
     expected_key = f"STOCK:{stock_code.strip().upper()}" if target == "STOCK" else target
     if service.active_target != expected_key:
         run_async(service.set_target(target, stock_code))
@@ -431,7 +437,7 @@ def render_live_board(target: str, stock_code: str, force: bool) -> None:
         unsafe_allow_html=True,
     )
 
-    # 2. 多週期看板（15分 / 30分 / 時 / 日 / 週）
+    # 2. 多週期看板（15分 / 時 / 日 / 週）
     rows_html = []
     for tf in timeframes:
         st_info = tf["streak"]

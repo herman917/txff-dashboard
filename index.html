@@ -56,7 +56,7 @@
                 </button>
               </div>
               <div class="inline-flex items-center gap-1">
-                <input id="stock-code-input" type="text" placeholder="台股代號 (例: 2330)" maxlength="10"
+                <input id="stock-code-input" type="text" placeholder="台股代號 (例: 2330)" maxlength="10" onfocus="this.value=''"
                   onkeydown="if(event.key==='Enter') queryStockCode()"
                   class="w-32 px-2 py-1 text-xs rounded-md bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
                 <button onclick="queryStockCode()"
@@ -123,7 +123,7 @@
     <main class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
       <div class="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900">
         <div class="flex items-center gap-2">
-          <h2 class="text-sm sm:text-base font-bold text-slate-100">多週期多空力道矩陣（15分 / 30分 / 時 / 日 / 週）</h2>
+          <h2 class="text-sm sm:text-base font-bold text-slate-100">多週期多空力道矩陣（15分 / 時 / 日 / 週）</h2>
         </div>
         <div class="flex items-center gap-3 text-xs text-slate-400">
           <span class="inline-flex items-center gap-1"><span
@@ -432,7 +432,7 @@
 
     function renderMiniKlineSvg(miniCandles, reversal, chartMarkers) {
       if (!miniCandles || miniCandles.length === 0) return '<div class="text-xs text-slate-500">無 K 線資料</div>';
-      const w = 220, h = 150, padTop = 18, padBot = 18;
+      const w = 220, h = 180, padTop = 18, padBot = 18;
       const hi = Math.max(...miniCandles.map(c => c.h));
       const lo = Math.min(...miniCandles.map(c => c.l));
       const span = Math.max(hi - lo, 0.01);
@@ -485,7 +485,7 @@
         }
       });
 
-      return `<div class="relative w-full h-[150px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="150" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
+      return `<div class="relative w-full h-[180px] bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"><svg width="100%" height="180" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block">${elems.join('')}</svg>${overlayHtml}</div>`;
     }
 
     function renderTimeframeRow(tf) {

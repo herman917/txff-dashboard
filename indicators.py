@@ -193,10 +193,12 @@ def calculate_price_ratio(
 
 def _run_wave_state_machine(
     candles: List[Dict[str, Any]],
+    threshold: float = 0.0,
 ) -> Tuple[List[int], int, List[Dict[str, Any]]]:
     """
     執行太極陰陽波段狀態機，回傳 (每根等效顏色, 最終 wave_state, 狀態切換事件列表)。
     每筆切換事件包含 {"abs_idx": int, "signal": "bull_reversal" | "bear_reversal", "pattern": str}。
+    若新轉折點位與前次反向轉折點位高度差 < threshold 且區間總振幅 < threshold * 1.5，則判定為盤整 (wave_state=0)。
     """
     states: List[int] = []
     prev_color = 0
@@ -217,6 +219,9 @@ def _run_wave_state_machine(
     consec_bear = 0
     bull_stop_low: Optional[float] = None
     bear_stop_high: Optional[float] = None
+    last_pivot_idx: Optional[int] = None
+    last_pivot_close: Optional[float] = None
+    last_pivot_dir: int = 0
     transitions: List[Dict[str, Any]] = []
 
     for idx, col in enumerate(states):
@@ -229,30 +234,33 @@ def _run_wave_state_machine(
             consec_bull = 0
 
         prev_wave = wave_state
+        next_wave = wave_state
+        next_bull_low = bull_stop_low
+        next_bear_high = bear_stop_high
         pattern: Optional[str] = None
 
         # 依《太極陰陽學》停損/失效規則：跌破轉陽K線最低價 -> 轉陽失效轉為陰；突破轉陰K線最高價 -> 轉陰失效轉為陽
         if wave_state == 1 and bull_stop_low is not None and c["close"] < bull_stop_low:
-            wave_state = -1
-            bull_stop_low = None
-            bear_stop_high = c["high"]
+            next_wave = -1
+            next_bull_low = None
+            next_bear_high = c["high"]
             pattern = "跌破轉陽低點"
         elif wave_state == -1 and bear_stop_high is not None and c["close"] > bear_stop_high:
-            wave_state = 1
-            bear_stop_high = None
-            bull_stop_low = c["low"]
+            next_wave = 1
+            next_bear_high = None
+            next_bull_low = c["low"]
             pattern = "突破轉陰高點"
 
         if consec_bull >= 2:
-            wave_state = 1
-            bull_stop_low = min(candles[idx - 1]["low"], c["low"]) if idx >= 1 else c["low"]
-            bear_stop_high = None
+            next_wave = 1
+            next_bull_low = min(candles[idx - 1]["low"], c["low"]) if idx >= 1 else c["low"]
+            next_bear_high = None
             if prev_wave != 1:
                 pattern = "連2陽K"
         elif consec_bear >= 2:
-            wave_state = -1
-            bear_stop_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
-            bull_stop_low = None
+            next_wave = -1
+            next_bear_high = max(candles[idx - 1]["high"], c["high"]) if idx >= 1 else c["high"]
+            next_bull_low = None
             if prev_wave != -1:
                 pattern = "連2陰K"
         elif idx >= 4:
@@ -260,19 +268,46 @@ def _run_wave_state_machine(
             sub = candles[max(0, idx - 15) : idx + 1]
             sig = _detect_confirmed_reversal_at_tip(sub)
             if sig["signal"] == "bull_reversal":
-                wave_state = 1
-                bull_stop_low = c["low"]
-                bear_stop_high = None
+                next_wave = 1
+                next_bull_low = c["low"]
+                next_bear_high = None
                 if prev_wave != 1:
                     pattern = sig["pattern"]
             elif sig["signal"] == "bear_reversal":
-                wave_state = -1
-                bear_stop_high = c["high"]
-                bull_stop_low = None
+                next_wave = -1
+                next_bear_high = c["high"]
+                next_bull_low = None
                 if prev_wave != -1:
                     pattern = sig["pattern"]
 
+        # 窄幅盤整過濾：欲轉向時若與前次反向轉折點位高度太近且區間未拉開振幅，歸類為盤整 (wave_state=0)
+        if (
+            threshold > 0
+            and next_wave != 0
+            and next_wave != prev_wave
+            and last_pivot_idx is not None
+            and last_pivot_close
+            and last_pivot_close > 0
+            and (next_wave != last_pivot_dir or prev_wave == 0)
+        ):
+            seg = candles[last_pivot_idx + 1 : idx + 1] or [c]
+            seg_high = max(x["high"] for x in seg)
+            seg_low = min(x["low"] for x in seg)
+            point_diff = abs(c["close"] - last_pivot_close) / last_pivot_close
+            seg_amp = (seg_high - seg_low) / last_pivot_close
+            if point_diff < threshold and seg_amp < threshold * 1.5:
+                next_wave = 0
+                next_bull_low = None
+                next_bear_high = None
+
+        wave_state = next_wave
+        bull_stop_low = next_bull_low
+        bear_stop_high = next_bear_high
+
         if wave_state != prev_wave and wave_state != 0:
+            last_pivot_idx = idx
+            last_pivot_close = c["close"]
+            last_pivot_dir = wave_state
             transitions.append({
                 "abs_idx": idx,
                 "signal": "bull_reversal" if wave_state == 1 else "bear_reversal",
@@ -282,13 +317,16 @@ def _run_wave_state_machine(
     return states, wave_state, transitions
 
 
-def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_candle_streak(
+    candles: List[Dict[str, Any]],
+    threshold: float = 0.0,
+) -> Dict[str, Any]:
     """
     太極陰陽狀態機判定（單點起漲/起跌後延續，直到反向轉折訊號出現）：
     - 收盤 > 開盤：紅 K (+1)；收盤 < 開盤：黑 K (-1)；十字線延續前一根顏色。
     - 連續 2 根以上紅 K (>= +2) 或底部反轉訊號 -> 轉為【陽】(+1)，並維持在陽直到出現轉陰訊號。
     - 連續 2 根以上黑 K (>= -2) 或頂部反轉訊號 -> 轉為【陰】(-1)，並維持在陰直到出現轉陽訊號。
-    - 即使下跌波段中出現單根紅 K 反彈（未達連 2 紅），只要尚未轉陽，狀態仍維持在【陰】。
+    - 若轉陽與轉陰點位高度差過近且區間振幅狹窄，則判定為【盤整】。
     """
     if not candles:
         return {
@@ -299,7 +337,7 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "streak_label": "無資料",
         }
 
-    states, wave_state, _ = _run_wave_state_machine(candles)
+    states, wave_state, _ = _run_wave_state_machine(candles, threshold=threshold)
 
     latest_color = states[-1]
     if latest_color == 0 and wave_state == 0:
@@ -330,11 +368,11 @@ def calculate_candle_streak(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
         streak_label = f"連 {count} 黑" if latest_color == -1 and count >= 2 else "在陰"
     else:
         status = "盤整"
-        direction = "bull_weak" if signed_streak == 1 else "bear_weak"
-        streak_label = "1 紅" if signed_streak == 1 else "1 黑"
+        direction = "neutral"
+        streak_label = "窄幅盤整" if abs(signed_streak) >= 2 else ("1 紅" if signed_streak == 1 else "1 黑")
 
     return {
-        "streak": wave_state if wave_state != 0 else signed_streak,
+        "streak": wave_state,
         "abs_streak": count,
         "status": status,
         "direction": direction,
@@ -666,8 +704,10 @@ def evaluate_all_timeframes(
 
         swing_high, swing_low, is_fallback = calculate_zigzag_pivots(confirmed_candles, threshold)
         ratio_info = calculate_price_ratio(current_price, swing_high, swing_low)
-        streak_info = calculate_candle_streak(confirmed_candles)
+        streak_info = calculate_candle_streak(confirmed_candles, threshold=threshold)
         reversal_info = detect_reversal_signal(candles, ratio_info, swing_high, swing_low, tf_key=tf_key)
+        if streak_info["status"] == "盤整":
+            reversal_info = {"signal": "none", "pattern": None, "zone": "mid", "is_taiji": False, "repeat_count": 0, "bars_ago": 0}
 
         latest_candle = confirmed_candles[-1] if confirmed_candles else (candles[-1] if candles else None)
 
@@ -694,14 +734,14 @@ def evaluate_all_timeframes(
             mini_candles.append({"o": lc["open"], "h": lc["high"], "l": lc["low"], "c": lc["close"], "forming": True})
 
         # 與太極陰陽狀態機完全同步：僅在狀態機切換（陰→陽 / 陽→陰）時標示，
-        # 後續已被反向切換覆蓋的舊標示一律設為 invalidated=True（虛線外框），確保與上方狀態標籤 100% 一致
-        _, _, transitions = _run_wave_state_machine(confirmed_candles)
+        # 若已進入盤整 (wave_state==0) 或後方有新轉折，舊標示一律設為 invalidated=True（虛線外框）
+        _, final_wave, transitions = _run_wave_state_machine(confirmed_candles, threshold=threshold)
         chart_markers: List[Dict[str, Any]] = [
             {
                 "vis_idx": tr["abs_idx"] - vis_start,
                 "signal": tr["signal"],
                 "pattern": tr["pattern"],
-                "invalidated": (idx_tr < len(transitions) - 1),
+                "invalidated": (final_wave == 0 or idx_tr < len(transitions) - 1),
             }
             for idx_tr, tr in enumerate(transitions)
             if tr["abs_idx"] >= vis_start
